@@ -46,3 +46,21 @@ def test_preprocess_word_count():
 def test_preprocess_short_text_minimum():
     result = preprocess_text("Hello.", "en")
     assert result["word_count"] >= 1
+
+
+def test_detect_empty_string_returns_fallback():
+    result = detect_language("")
+    assert result["lang"] == "en"
+    assert result["confidence"] == 0.0
+
+
+def test_preprocess_invalid_lang_raises():
+    import pytest
+    with pytest.raises(ValueError):
+        preprocess_text("hello world", "fr")
+
+
+def test_preprocess_empty_string_returns_empty():
+    result = preprocess_text("", "en")
+    assert result["word_count"] == 0
+    assert result["tokens"] == []

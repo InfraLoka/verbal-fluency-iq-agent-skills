@@ -29,14 +29,19 @@ def _langid_confidence(text: str) -> tuple[str, float]:
 
 
 def detect_language(text: str) -> dict:
+    if not text or not text.strip():
+        return {"lang": "en", "confidence": 0.0}
+
+    ld_failed = False
     try:
         ld_lang = detect(text)
     except LangDetectException:
-        ld_lang = "en"
+        ld_lang = None
+        ld_failed = True
 
     li_lang, li_conf = _langid_confidence(text)
 
-    if ld_lang == li_lang:
+    if not ld_failed and ld_lang == li_lang:
         lang = ld_lang
         confidence = round(min(0.95, li_conf + 0.05), 2)
     else:
@@ -51,6 +56,11 @@ def detect_language(text: str) -> dict:
 
 
 def preprocess_text(text: str, lang: str) -> dict:
+    if lang not in ("en", "id"):
+        raise ValueError(f"Unsupported language: {lang!r}. Must be 'en' or 'id'.")
+    if not text or not text.strip():
+        return {"tokens": [], "sentences": [], "word_count": 0, "sentence_count": 0, "text_clean": ""}
+
     cleaned = re.sub(r"http\S+|www\S+", "", text)
     cleaned = re.sub(r"@\w+|#\w+", "", cleaned)
     cleaned = re.sub(r"\s+", " ", cleaned).strip()
