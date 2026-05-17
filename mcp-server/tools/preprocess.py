@@ -13,7 +13,12 @@ _nlp_cache: dict = {}
 def _get_nlp(lang: str):
     if lang not in _nlp_cache:
         model = "en_core_web_sm" if lang == "en" else "xx_ent_wiki_sm"
-        _nlp_cache[lang] = spacy.load(model)
+        nlp = spacy.load(model)
+        # xx_ent_wiki_sm has no dependency parser or sentencizer; add one so
+        # doc.sents is available for non-English languages.
+        if "sentencizer" not in nlp.pipe_names and "parser" not in nlp.pipe_names and "senter" not in nlp.pipe_names:
+            nlp.add_pipe("sentencizer", first=True)
+        _nlp_cache[lang] = nlp
     return _nlp_cache[lang]
 
 
