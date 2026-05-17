@@ -1,0 +1,123 @@
+{
+  "schema_version": "1.0",
+  "mcp_server": "verbal-fluency-mcp",
+  "tools": [
+    {
+      "name": "tool_detect_language",
+      "description": "Detect language (en|id) from text with confidence score",
+      "parameters": {
+        "text": { "type": "string", "required": true }
+      },
+      "returns": { "lang": "string", "confidence": "number" }
+    },
+    {
+      "name": "tool_preprocess_text",
+      "description": "Clean, tokenize, and sentence-split text",
+      "parameters": {
+        "text": { "type": "string", "required": true },
+        "lang": { "type": "string", "enum": ["en", "id"], "required": true }
+      },
+      "returns": { "tokens": "array", "sentences": "array", "word_count": "integer", "sentence_count": "integer", "text_clean": "string" }
+    },
+    {
+      "name": "tool_analyze_lexical",
+      "description": "Compute MATTR, VOCD-D, hapax ratio, lexical density with sentence evidence",
+      "parameters": {
+        "tokens_json": { "type": "string", "required": true },
+        "sentences_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "required": true }
+      },
+      "returns": { "mattr": "number", "vocd_d": "number|null", "hapax_ratio": "number", "lexical_density": "number", "avg_word_length": "number", "score": "number", "evidence": "array" }
+    },
+    {
+      "name": "tool_analyze_syntactic",
+      "description": "Compute clause density, subordination index, dependency depth",
+      "parameters": {
+        "sentences_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "required": true }
+      },
+      "returns": { "mean_sentence_length": "number", "clause_density": "number", "subordination_index": "number", "dependency_depth": "number", "passive_ratio": "number", "score": "number", "evidence": "array" }
+    },
+    {
+      "name": "tool_analyze_semantic",
+      "description": "Compute argument coherence, topic drift, lexical chain density",
+      "parameters": {
+        "text": { "type": "string", "required": true },
+        "sentences_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "required": true }
+      },
+      "returns": { "argument_coherence": "number|null", "topic_drift_index": "number|null", "lexical_chain_density": "number", "entity_sophistication": "string", "score": "number", "evidence": "array" }
+    },
+    {
+      "name": "tool_analyze_readability",
+      "description": "Compute Flesch Reading Ease, Gunning Fog, ARI, Coleman-Liau",
+      "parameters": {
+        "text": { "type": "string", "required": true },
+        "lang": { "type": "string", "required": true }
+      },
+      "returns": { "flesch_reading_ease": "number", "gunning_fog": "number", "ari": "number", "coleman_liau": "number", "score": "number", "evidence": "array" }
+    },
+    {
+      "name": "tool_compute_verbal_fluency_score",
+      "description": "Combine lexical/syntactic/semantic/readability into weighted VFS (0-100)",
+      "parameters": {
+        "lexical_json": { "type": "string", "required": true },
+        "syntactic_json": { "type": "string", "required": true },
+        "semantic_json": { "type": "string", "required": true },
+        "readability_json": { "type": "string", "required": true },
+        "word_count": { "type": "integer", "required": true },
+        "lang": { "type": "string", "required": true }
+      },
+      "returns": { "vfs": "number", "lexical": "number", "syntactic": "number", "semantic": "number", "readability": "number", "confidence": "number", "confidence_label": "string", "lang": "string", "text_length_words": "integer" }
+    },
+    {
+      "name": "tool_predict_iq",
+      "description": "Map VFS to IQ point estimate with 95% confidence interval",
+      "parameters": {
+        "vfs": { "type": "number", "required": true },
+        "confidence": { "type": "number", "required": true }
+      },
+      "returns": { "point_estimate": "integer", "ci_low": "integer", "ci_high": "integer", "classification": "string", "percentile": "integer" }
+    },
+    {
+      "name": "tool_predict_mental_age",
+      "description": "Compute mental age from IQ. Use chronological_age=0 to use default (30).",
+      "parameters": {
+        "iq_estimate": { "type": "number", "required": true },
+        "chronological_age": { "type": "integer", "default": 0 }
+      },
+      "returns": { "mental_age": "number", "based_on_chronological_age": "integer", "age_assumed": "boolean", "formula": "string" }
+    },
+    {
+      "name": "tool_estimate_education_level",
+      "description": "Map readability metrics to education level with EN and ID labels",
+      "parameters": {
+        "gunning_fog": { "type": "number", "required": true },
+        "ari": { "type": "number", "required": true },
+        "lexical_density": { "type": "number", "required": true },
+        "clause_density": { "type": "number", "required": true }
+      },
+      "returns": { "level_en": "string", "level_id": "string", "level_code": "string", "confidence": "number", "confidence_label": "string" }
+    },
+    {
+      "name": "tool_generate_report",
+      "description": "Generate JSON scores and/or structured report with sentence-level citation evidence",
+      "parameters": {
+        "lang_result_json": { "type": "string", "required": true },
+        "preprocess_result_json": { "type": "string", "required": true },
+        "lexical_result_json": { "type": "string", "required": true },
+        "syntactic_result_json": { "type": "string", "required": true },
+        "semantic_result_json": { "type": "string", "required": true },
+        "readability_result_json": { "type": "string", "required": true },
+        "vfs_result_json": { "type": "string", "required": true },
+        "iq_result_json": { "type": "string", "required": true },
+        "mental_age_result_json": { "type": "string", "required": true },
+        "edu_result_json": { "type": "string", "required": true },
+        "format_flag": { "type": "string", "enum": ["--json","--report","--both","--scores-only","--verbose-caveats"], "default": "--both" },
+        "chronological_age": { "type": "integer", "default": 0 },
+        "verbose_caveats": { "type": "boolean", "default": false }
+      },
+      "returns": { "json": "object|null", "report": "string|null" }
+    }
+  ]
+}
