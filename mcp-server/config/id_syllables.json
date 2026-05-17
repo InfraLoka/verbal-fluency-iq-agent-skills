@@ -1,0 +1,5 @@
+{
+  "vowels": ["a", "e", "i", "o", "u"],
+  "diphthongs": ["ai", "au", "oi", "ei"],
+  "note": "Indonesian syllable counting: count vowel nuclei. Diphthongs count as one syllable."
+}

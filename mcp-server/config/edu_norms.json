@@ -1,0 +1,46 @@
+{
+  "levels": [
+    {
+      "fog_min": 17, "ari_min": 16, "lexical_density_min": 0.60,
+      "level_en": "Doctoral / Postgrad Research",
+      "level_id": "Doktor / Peneliti Pascasarjana",
+      "code": "S3"
+    },
+    {
+      "fog_min": 14, "ari_min": 13, "lexical_density_min": 0.55,
+      "level_en": "Graduate",
+      "level_id": "Magister (S2)",
+      "code": "S2"
+    },
+    {
+      "fog_min": 11, "ari_min": 10, "lexical_density_min": 0.48,
+      "level_en": "Undergraduate",
+      "level_id": "Sarjana (S1/D4)",
+      "code": "S1"
+    },
+    {
+      "fog_min": 9, "ari_min": 8, "lexical_density_min": 0.42,
+      "level_en": "Vocational / Diploma",
+      "level_id": "Diploma (D1-D3)",
+      "code": "D3"
+    },
+    {
+      "fog_min": 7, "ari_min": 6, "lexical_density_min": 0.36,
+      "level_en": "Senior High School",
+      "level_id": "SMA/SMK",
+      "code": "SMA"
+    },
+    {
+      "fog_min": 5, "ari_min": 4, "lexical_density_min": 0.30,
+      "level_en": "Junior High School",
+      "level_id": "SMP",
+      "code": "SMP"
+    },
+    {
+      "fog_min": 0, "ari_min": 0, "lexical_density_min": 0.0,
+      "level_en": "Primary School",
+      "level_id": "SD",
+      "code": "SD"
+    }
+  ]
+}

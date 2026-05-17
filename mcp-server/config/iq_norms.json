@@ -1,0 +1,35 @@
+{
+  "bands": [
+    {
+      "vfs_min": 85, "vfs_max": 100,
+      "iq_min": 125, "iq_max": 145,
+      "label": "Gifted / Highly Gifted",
+      "percentile_min": 95
+    },
+    {
+      "vfs_min": 70, "vfs_max": 84.99,
+      "iq_min": 110, "iq_max": 124,
+      "label": "Above Average / Superior",
+      "percentile_min": 75
+    },
+    {
+      "vfs_min": 55, "vfs_max": 69.99,
+      "iq_min": 90, "iq_max": 109,
+      "label": "Average",
+      "percentile_min": 25
+    },
+    {
+      "vfs_min": 40, "vfs_max": 54.99,
+      "iq_min": 75, "iq_max": 89,
+      "label": "Below Average",
+      "percentile_min": 5
+    },
+    {
+      "vfs_min": 0, "vfs_max": 39.99,
+      "iq_min": 55, "iq_max": 74,
+      "label": "Low",
+      "percentile_min": 1
+    }
+  ],
+  "default_chronological_age": 30
+}
