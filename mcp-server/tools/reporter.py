@@ -66,23 +66,37 @@ def generate_report(
 
     line(sep)
     line("  VERBAL FLUENCY INTELLIGENCE REPORT")
-    line(f"  Generated: {date.today().isoformat()} | Language: {LANG_LABELS.get(lang_result['lang'], lang_result['lang'])}")
+    line(
+        f"  Generated: {date.today().isoformat()} | Language: {LANG_LABELS.get(lang_result['lang'], lang_result['lang'])}"
+    )
     line(sep)
     line()
     line("  SUBJECT PROFILE")
-    line(f"  Text input          : {preprocess_result['word_count']} words, {preprocess_result['sentence_count']} sentences")
+    line(
+        f"  Text input          : {preprocess_result['word_count']} words, {preprocess_result['sentence_count']} sentences"
+    )
     line(f"  Lang detection conf : {lang_result['confidence']:.0%}")
-    line(f"  Analysis confidence : {vfs_result['confidence_label']} ({vfs_result['confidence']:.0%})")
+    line(
+        f"  Analysis confidence : {vfs_result['confidence_label']} ({vfs_result['confidence']:.0%})"
+    )
     line()
 
     line(thin)
     line("  VERBAL FLUENCY SCORE")
     line(thin)
     line(f"  Overall VFS     : {vfs_result['vfs']} / 100")
-    line(f"  └── Lexical     : {vfs_result['lexical']} / 100  {_bar(vfs_result['lexical'])}")
-    line(f"  └── Syntactic   : {vfs_result['syntactic']} / 100  {_bar(vfs_result['syntactic'])}")
-    line(f"  └── Semantic    : {vfs_result['semantic']} / 100  {_bar(vfs_result['semantic'])}")
-    line(f"  └── Readability : {vfs_result['readability']} / 100  {_bar(vfs_result['readability'])}")
+    line(
+        f"  └── Lexical     : {vfs_result['lexical']} / 100  {_bar(vfs_result['lexical'])}"
+    )
+    line(
+        f"  └── Syntactic   : {vfs_result['syntactic']} / 100  {_bar(vfs_result['syntactic'])}"
+    )
+    line(
+        f"  └── Semantic    : {vfs_result['semantic']} / 100  {_bar(vfs_result['semantic'])}"
+    )
+    line(
+        f"  └── Readability : {vfs_result['readability']} / 100  {_bar(vfs_result['readability'])}"
+    )
     line()
 
     line(thin)
@@ -99,7 +113,9 @@ def generate_report(
     line(thin)
     line(f"  Estimated       : {mental_age_result['mental_age']} years")
     if mental_age_result["age_assumed"]:
-        line(f"  (Chronological age assumed: {mental_age_result['based_on_chronological_age']} | pass --age=N for precision)")
+        line(
+            f"  (Chronological age assumed: {mental_age_result['based_on_chronological_age']} | pass --age=N for precision)"
+        )
     line()
 
     line(thin)
@@ -107,14 +123,18 @@ def generate_report(
     line(thin)
     line(f"  EN label        : {edu_result['level_en']}")
     line(f"  ID label        : {edu_result['level_id']}")
-    line(f"  Confidence      : {edu_result['confidence_label']} ({edu_result['confidence']:.0%})")
+    line(
+        f"  Confidence      : {edu_result['confidence_label']} ({edu_result['confidence']:.0%})"
+    )
     line()
 
     line(thin)
     line("  DETAILED LEXICAL METRICS")
     line(thin)
     line(f"  MATTR (window=50)     : {lexical_result['mattr']}")
-    line(f"  VOCD-D                : {lexical_result.get('vocd_d') or 'N/A (< 50 words)'}")
+    line(
+        f"  VOCD-D                : {lexical_result.get('vocd_d') or 'N/A (< 50 words)'}"
+    )
     line(f"  Hapax Legomena ratio  : {lexical_result['hapax_ratio']}")
     line(f"  Lexical density       : {lexical_result['lexical_density']}")
     line(f"  Avg word length       : {lexical_result['avg_word_length']} chars")
@@ -134,7 +154,9 @@ def generate_report(
     line("  DETAILED SEMANTIC METRICS")
     line(thin)
     line(f"  Argument coherence    : {semantic_result['argument_coherence']}")
-    line(f"  Topic drift index     : {semantic_result['topic_drift_index']} (low = focused)")
+    line(
+        f"  Topic drift index     : {semantic_result['topic_drift_index']} (low = focused)"
+    )
     line(f"  Lexical chain density : {semantic_result['lexical_chain_density']}")
     line(f"  Entity sophistication : {semantic_result['entity_sophistication']}")
     line()
@@ -154,7 +176,9 @@ def generate_report(
     line()
 
     line(f"  [LEXICAL — Score {vfs_result['lexical']}]")
-    line(f"  Vocabulary diversity (MATTR {lexical_result['mattr']}), lexical density {lexical_result['lexical_density']}.")
+    line(
+        f"  Vocabulary diversity (MATTR {lexical_result['mattr']}), lexical density {lexical_result['lexical_density']}."
+    )
     for ev in lexical_result.get("evidence", []):
         line("  Evidence:")
         line(f"    → {_trunc(ev['sentence'])}")
@@ -162,7 +186,9 @@ def generate_report(
     line()
 
     line(f"  [SYNTACTIC — Score {vfs_result['syntactic']}]")
-    line(f"  Clause density {syntactic_result['clause_density']}, subordination index {syntactic_result['subordination_index']}.")
+    line(
+        f"  Clause density {syntactic_result['clause_density']}, subordination index {syntactic_result['subordination_index']}."
+    )
     for ev in syntactic_result.get("evidence", []):
         line("  Evidence:")
         line(f"    → {_trunc(ev['sentence'])}")
@@ -170,39 +196,55 @@ def generate_report(
     line()
 
     line(f"  [SEMANTIC — Score {vfs_result['semantic']}]")
-    line(f"  Argument coherence {semantic_result['argument_coherence']}, topic drift {semantic_result['topic_drift_index']}.")
+    line(
+        f"  Argument coherence {semantic_result['argument_coherence']}, topic drift {semantic_result['topic_drift_index']}."
+    )
     sents = preprocess_result.get("sentences", [])
     sent_map = {s["idx"]: s["text"] for s in sents}
     for ev in semantic_result.get("evidence", [])[:3]:
-        line(f"    → S{ev['sentence_idx_from']}→S{ev['sentence_idx_to']} coherence: {ev['coherence']} [{ev['note']}]")
+        line(
+            f"    → S{ev['sentence_idx_from']}→S{ev['sentence_idx_to']} coherence: {ev['coherence']} [{ev['note']}]"
+        )
         src = sent_map.get(ev["sentence_idx_from"], "")
         if src:
             line(f"       {_trunc(src, 80)}")
     line()
 
     line(f"  [READABILITY — Score {vfs_result['readability']}]")
-    line(f"  Gunning Fog {readability_result['gunning_fog']}, ARI {readability_result['ari']}.")
+    line(
+        f"  Gunning Fog {readability_result['gunning_fog']}, ARI {readability_result['ari']}."
+    )
     for ev in readability_result.get("evidence", []):
         line("  Evidence:")
         line(f"    → {_trunc(ev['sentence'])}")
         line(f"       [{', '.join(ev['triggered_by'])}]")
     line()
 
-    line(f"  [IQ PREDICTION — {iq_result['point_estimate']}, CI: {iq_result['ci_low']}–{iq_result['ci_high']}]")
-    line(f"  Driven by lexical sophistication (score {vfs_result['lexical']}) and syntactic complexity (score {vfs_result['syntactic']}).")
+    line(
+        f"  [IQ PREDICTION — {iq_result['point_estimate']}, CI: {iq_result['ci_low']}–{iq_result['ci_high']}]"
+    )
+    line(
+        f"  Driven by lexical sophistication (score {vfs_result['lexical']}) and syntactic complexity (score {vfs_result['syntactic']})."
+    )
     for ev in lexical_result.get("evidence", [])[:3]:
         line(f"    → [S{ev['sentence_idx']}] {_trunc(ev['sentence'], 80)}")
     line()
 
-    line(f"  [EDUCATION ESTIMATE — {edu_result['level_code']}/{edu_result['level_en']}]")
-    line(f"  Fog {readability_result['gunning_fog']} + ARI {readability_result['ari']} + lexical density {lexical_result['lexical_density']}.")
+    line(
+        f"  [EDUCATION ESTIMATE — {edu_result['level_code']}/{edu_result['level_en']}]"
+    )
+    line(
+        f"  Fog {readability_result['gunning_fog']} + ARI {readability_result['ari']} + lexical density {lexical_result['lexical_density']}."
+    )
     line(f"  Writing style consistent with {edu_result['level_en']} authorship.")
     line()
 
     line(thin)
     line("  CONFIDENCE & LIMITATIONS")
     line(thin)
-    line(f"  Overall confidence    : {vfs_result['confidence_label']} ({vfs_result['confidence']:.0%})")
+    line(
+        f"  Overall confidence    : {vfs_result['confidence_label']} ({vfs_result['confidence']:.0%})"
+    )
     line("  Limiting factors      :")
     line("    • Text-based IQ estimation carries ±10–15 pt error margin")
     line("    • Mental age assumes population median if age not supplied")
@@ -218,8 +260,12 @@ def generate_report(
         line("      (WAIS-IV, Raven's Progressive Matrices, etc.).")
         line("    • The IQ→mental age formula is a simplified ratio model.")
         line("    • Education estimates assume formal schooling context.")
-        line("    • Indonesian norms are approximated from EN research with ID adaptation.")
-        line("    • Do not use these estimates for hiring, clinical, or legal decisions.")
+        line(
+            "    • Indonesian norms are approximated from EN research with ID adaptation."
+        )
+        line(
+            "    • Do not use these estimates for hiring, clinical, or legal decisions."
+        )
 
     line()
     line(thin)

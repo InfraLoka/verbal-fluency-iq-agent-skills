@@ -56,11 +56,13 @@ def analyze_syntactic(sentences: List[dict], lang: str) -> dict:
         if is_passive:
             triggered.append("passive_voice")
         if triggered:
-            evidence.append({
-                "sentence_idx": sent_data["idx"],
-                "sentence": sent_data["text"],
-                "triggered_by": triggered,
-            })
+            evidence.append(
+                {
+                    "sentence_idx": sent_data["idx"],
+                    "sentence": sent_data["text"],
+                    "triggered_by": triggered,
+                }
+            )
 
     n = len(sentences)
     msl = round(sum(lengths) / n, 1) if n else 0
@@ -74,7 +76,9 @@ def analyze_syntactic(sentences: List[dict], lang: str) -> dict:
     si_score = min(100.0, max(0.0, sub_index / 1.5 * 100))
     dd_score = min(100.0, max(0.0, (dep_depth - 2) / 8 * 100))
 
-    score = round(msl_score * 0.30 + cd_score * 0.35 + si_score * 0.25 + dd_score * 0.10, 1)
+    score = round(
+        msl_score * 0.30 + cd_score * 0.35 + si_score * 0.25 + dd_score * 0.10, 1
+    )
 
     return {
         "mean_sentence_length": msl,

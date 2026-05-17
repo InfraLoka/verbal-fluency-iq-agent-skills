@@ -6,7 +6,7 @@ import spacy
 from sentence_transformers import SentenceTransformer
 from sklearn.metrics.pairwise import cosine_similarity
 
-_model_cache = {}
+_model_cache: dict = {}
 _nlp_cache: dict = {}
 
 ABSTRACT_TYPES = {"LAW", "ORG", "NORP", "EVENT", "WORK_OF_ART", "LANGUAGE"}
@@ -57,12 +57,14 @@ def analyze_semantic(text: str, sentences: List[dict], lang: str) -> dict:
             if sim < 0.50
             else "moderate transition"
         )
-        evidence.append({
-            "sentence_idx_from": sentences[i]["idx"],
-            "sentence_idx_to": sentences[i + 1]["idx"],
-            "coherence": round(sim, 3),
-            "note": note,
-        })
+        evidence.append(
+            {
+                "sentence_idx_from": sentences[i]["idx"],
+                "sentence_idx_to": sentences[i + 1]["idx"],
+                "coherence": round(sim, 3),
+                "note": note,
+            }
+        )
 
     argument_coherence = round(float(np.mean(coherence_vals)), 3)
     topic_drift_index = round(float(np.std(coherence_vals)), 3)
@@ -89,10 +91,16 @@ def analyze_semantic(text: str, sentences: List[dict], lang: str) -> dict:
     coh_score = min(100.0, max(0.0, (argument_coherence - 0.3) / 0.6 * 100))
     drift_score = min(100.0, max(0.0, (1 - topic_drift_index / 0.3) * 100))
     chain_score = min(100.0, max(0.0, (lexical_chain_density - 0.1) / 0.5 * 100))
-    entity_score = {"ABSTRACT": 80.0, "CONCRETE": 50.0, "MINIMAL": 20.0}[entity_sophistication]
+    entity_score = {"ABSTRACT": 80.0, "CONCRETE": 50.0, "MINIMAL": 20.0}[
+        entity_sophistication
+    ]
 
     score = round(
-        coh_score * 0.45 + drift_score * 0.25 + chain_score * 0.20 + entity_score * 0.10, 1
+        coh_score * 0.45
+        + drift_score * 0.25
+        + chain_score * 0.20
+        + entity_score * 0.10,
+        1,
     )
 
     return {

@@ -16,7 +16,11 @@ def _get_nlp(lang: str):
         nlp = spacy.load(model)
         # xx_ent_wiki_sm has no dependency parser or sentencizer; add one so
         # doc.sents is available for non-English languages.
-        if "sentencizer" not in nlp.pipe_names and "parser" not in nlp.pipe_names and "senter" not in nlp.pipe_names:
+        if (
+            "sentencizer" not in nlp.pipe_names
+            and "parser" not in nlp.pipe_names
+            and "senter" not in nlp.pipe_names
+        ):
             nlp.add_pipe("sentencizer", first=True)
         _nlp_cache[lang] = nlp
     return _nlp_cache[lang]
@@ -64,7 +68,13 @@ def preprocess_text(text: str, lang: str) -> dict:
     if lang not in ("en", "id"):
         raise ValueError(f"Unsupported language: {lang!r}. Must be 'en' or 'id'.")
     if not text or not text.strip():
-        return {"tokens": [], "sentences": [], "word_count": 0, "sentence_count": 0, "text_clean": ""}
+        return {
+            "tokens": [],
+            "sentences": [],
+            "word_count": 0,
+            "sentence_count": 0,
+            "text_clean": "",
+        }
 
     cleaned = re.sub(r"http\S+|www\S+", "", text)
     cleaned = re.sub(r"@\w+|#\w+", "", cleaned)

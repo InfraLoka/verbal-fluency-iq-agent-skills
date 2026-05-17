@@ -1,4 +1,5 @@
 import sys
+
 sys.path.insert(0, "mcp-server")
 
 from tools.readability import analyze_readability
@@ -22,7 +23,14 @@ ID_TEXT = (
 
 def test_returns_required_keys():
     result = analyze_readability(COMPLEX_TEXT, "en")
-    for key in ("flesch_reading_ease", "gunning_fog", "ari", "coleman_liau", "score", "evidence"):
+    for key in (
+        "flesch_reading_ease",
+        "gunning_fog",
+        "ari",
+        "coleman_liau",
+        "score",
+        "evidence",
+    ):
         assert key in result
 
 

@@ -24,6 +24,7 @@ def analyze_lexical(tokens: List[str], sentences: List[dict], lang: str) -> dict
     if lang == "id":
         try:
             from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
+
             stemmer = StemmerFactory().create_stemmer()
             mattr_tokens = [stemmer.stem(t) for t in lower]
         except ImportError:
@@ -55,18 +56,22 @@ def analyze_lexical(tokens: List[str], sentences: List[dict], lang: str) -> dict
     awl_score = min(100.0, max(0.0, (avg_word_length - 3.5) / 4.0 * 100))
     ld_score = min(100.0, max(0.0, (lexical_density - 0.3) / 0.4 * 100))
 
-    score = round(mattr_score * 0.40 + hapax_score * 0.30 + awl_score * 0.15 + ld_score * 0.15, 1)
+    score = round(
+        mattr_score * 0.40 + hapax_score * 0.30 + awl_score * 0.15 + ld_score * 0.15, 1
+    )
 
     evidence = []
     for sent in sentences:
         words = [w for w in sent["text"].split() if w.isalpha()]
         rare = [w for w in words if freq.get(w.lower(), 0) == 1 and len(w) > 5]
         if rare:
-            evidence.append({
-                "sentence_idx": sent["idx"],
-                "sentence": sent["text"],
-                "triggered_by": [f"hapax:{w}" for w in rare[:3]],
-            })
+            evidence.append(
+                {
+                    "sentence_idx": sent["idx"],
+                    "sentence": sent["text"],
+                    "triggered_by": [f"hapax:{w}" for w in rare[:3]],
+                }
+            )
 
     return {
         "mattr": mattr,

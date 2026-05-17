@@ -25,8 +25,12 @@ def _load_edu_norms() -> dict:
 
 
 def compute_verbal_fluency_score(
-    lexical: dict, syntactic: dict, semantic: dict,
-    readability: dict, word_count: int, lang: str
+    lexical: dict,
+    syntactic: dict,
+    semantic: dict,
+    readability: dict,
+    word_count: int,
+    lang: str,
 ) -> dict:
     vfs = round(
         lexical["score"] * 0.35
@@ -73,7 +77,9 @@ def predict_iq(vfs: float, confidence: float) -> dict:
     iq_point = round(band["iq_min"] + position * (band["iq_max"] - band["iq_min"]))
 
     ci_half = round(15 - confidence * 10)
-    percentile = round(band["percentile_min"] + position * (95 - band["percentile_min"]))
+    percentile = round(
+        band["percentile_min"] + position * (95 - band["percentile_min"])
+    )
 
     return {
         "point_estimate": iq_point,
@@ -84,10 +90,16 @@ def predict_iq(vfs: float, confidence: float) -> dict:
     }
 
 
-def predict_mental_age(iq_estimate: float, chronological_age: Optional[int] = None) -> dict:
+def predict_mental_age(
+    iq_estimate: float, chronological_age: Optional[int] = None
+) -> dict:
     norms = _load_iq_norms()
     assumed = chronological_age is None
-    age = chronological_age if chronological_age is not None else norms["default_chronological_age"]
+    age = (
+        chronological_age
+        if chronological_age is not None
+        else norms["default_chronological_age"]
+    )
     return {
         "mental_age": round((iq_estimate / 100) * age, 1),
         "based_on_chronological_age": age,
@@ -110,11 +122,13 @@ def estimate_education_level(
             matched = level
             break
 
-    thresholds_met = sum([
-        gunning_fog >= matched["fog_min"] + 1,
-        ari >= matched["ari_min"] + 1,
-        lexical_density >= matched["lexical_density_min"] + 0.05,
-    ])
+    thresholds_met = sum(
+        [
+            gunning_fog >= matched["fog_min"] + 1,
+            ari >= matched["ari_min"] + 1,
+            lexical_density >= matched["lexical_density_min"] + 0.05,
+        ]
+    )
 
     if thresholds_met == 3:
         confidence, conf_label = 0.82, "HIGH"

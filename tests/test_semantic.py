@@ -1,4 +1,5 @@
 import sys
+
 sys.path.insert(0, "mcp-server")
 
 from tools.semantic import analyze_semantic
@@ -28,8 +29,14 @@ SINGLE_SENTENCE = [{"idx": 0, "text": "Hello world."}]
 
 def test_returns_required_keys():
     result = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
-    for key in ("argument_coherence", "topic_drift_index", "lexical_chain_density",
-                "entity_sophistication", "score", "evidence"):
+    for key in (
+        "argument_coherence",
+        "topic_drift_index",
+        "lexical_chain_density",
+        "entity_sophistication",
+        "score",
+        "evidence",
+    ):
         assert key in result
 
 

@@ -21,7 +21,11 @@ def _syllable_count(word: str, lang: str) -> int:
 def analyze_readability(text: str, lang: str) -> dict:
     textstat.set_lang("en_US")
 
-    sentences = [s.strip() for s in text.replace("!", ".").replace("?", ".").split(".") if s.strip()]
+    sentences = [
+        s.strip()
+        for s in text.replace("!", ".").replace("?", ".").split(".")
+        if s.strip()
+    ]
 
     evidence = []
     for i, sent in enumerate(sentences[:20]):
@@ -31,17 +35,21 @@ def analyze_readability(text: str, lang: str) -> dict:
         polysyllabic = sum(1 for w in words if _syllable_count(w, lang) >= 3)
         density = round(polysyllabic / len(words), 2)
         if density >= 0.3:
-            evidence.append({
-                "sentence_idx": i,
-                "sentence": sent,
-                "triggered_by": [f"polysyllabic_density:{density}"],
-            })
+            evidence.append(
+                {
+                    "sentence_idx": i,
+                    "sentence": sent,
+                    "triggered_by": [f"polysyllabic_density:{density}"],
+                }
+            )
 
     if lang == "id":
         words_all = text.split()
         sents_clean = [s for s in sentences if s]
         avg_sent_len = len(words_all) / max(1, len(sents_clean))
-        avg_syl = sum(_count_id_syllables(w) for w in words_all) / max(1, len(words_all))
+        avg_syl = sum(_count_id_syllables(w) for w in words_all) / max(
+            1, len(words_all)
+        )
         flesch = round(206.835 - 1.015 * avg_sent_len - 84.6 * avg_syl, 1)
     else:
         flesch = round(textstat.flesch_reading_ease(text), 1)
@@ -55,7 +63,9 @@ def analyze_readability(text: str, lang: str) -> dict:
     cl_score = min(100.0, max(0.0, (cl - 5) / 11 * 100))
     flesch_score = min(100.0, max(0.0, 100 - flesch))
 
-    score = round(fog_score * 0.35 + ari_score * 0.30 + cl_score * 0.20 + flesch_score * 0.15, 1)
+    score = round(
+        fog_score * 0.35 + ari_score * 0.30 + cl_score * 0.20 + flesch_score * 0.15, 1
+    )
 
     return {
         "flesch_reading_ease": flesch,

@@ -1,4 +1,5 @@
 import sys
+
 sys.path.insert(0, "mcp-server")
 
 from tools.lexical import analyze_lexical
@@ -16,13 +17,23 @@ SIMPLE_TOKENS = "the cat sat on the mat the cat sat the mat sat".split()
 
 SENTENCES = [
     {"idx": 0, "text": "The cat sat on the mat."},
-    {"idx": 1, "text": "The epistemological underpinnings dissolve into hermeneutical uncertainty."},
+    {
+        "idx": 1,
+        "text": "The epistemological underpinnings dissolve into hermeneutical uncertainty.",
+    },
 ]
 
 
 def test_analyze_lexical_returns_required_keys():
     result = analyze_lexical(RICH_TOKENS, SENTENCES, "en")
-    for key in ("mattr", "hapax_ratio", "lexical_density", "avg_word_length", "score", "evidence"):
+    for key in (
+        "mattr",
+        "hapax_ratio",
+        "lexical_density",
+        "avg_word_length",
+        "score",
+        "evidence",
+    ):
         assert key in result, f"Missing key: {key}"
 
 

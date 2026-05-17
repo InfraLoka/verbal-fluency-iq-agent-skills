@@ -36,7 +36,9 @@ def tool_preprocess_text(text: str, lang: str) -> str:
 @mcp.tool()
 def tool_analyze_lexical(tokens_json: str, sentences_json: str, lang: str) -> str:
     """Compute MATTR, VOCD-D, hapax ratio, lexical density. Returns score and evidence."""
-    return json.dumps(analyze_lexical(json.loads(tokens_json), json.loads(sentences_json), lang))
+    return json.dumps(
+        analyze_lexical(json.loads(tokens_json), json.loads(sentences_json), lang)
+    )
 
 
 @mcp.tool()
@@ -59,15 +61,24 @@ def tool_analyze_readability(text: str, lang: str) -> str:
 
 @mcp.tool()
 def tool_compute_verbal_fluency_score(
-    lexical_json: str, syntactic_json: str, semantic_json: str,
-    readability_json: str, word_count: int, lang: str
+    lexical_json: str,
+    syntactic_json: str,
+    semantic_json: str,
+    readability_json: str,
+    word_count: int,
+    lang: str,
 ) -> str:
     """Combine metric scores into weighted VFS (0-100) with confidence label."""
-    return json.dumps(compute_verbal_fluency_score(
-        json.loads(lexical_json), json.loads(syntactic_json),
-        json.loads(semantic_json), json.loads(readability_json),
-        word_count, lang,
-    ))
+    return json.dumps(
+        compute_verbal_fluency_score(
+            json.loads(lexical_json),
+            json.loads(syntactic_json),
+            json.loads(semantic_json),
+            json.loads(readability_json),
+            word_count,
+            lang,
+        )
+    )
 
 
 @mcp.tool()
@@ -88,7 +99,9 @@ def tool_estimate_education_level(
     gunning_fog: float, ari: float, lexical_density: float, clause_density: float
 ) -> str:
     """Map readability metrics to education level with EN and ID labels."""
-    return json.dumps(estimate_education_level(gunning_fog, ari, lexical_density, clause_density))
+    return json.dumps(
+        estimate_education_level(gunning_fog, ari, lexical_density, clause_density)
+    )
 
 
 @mcp.tool()

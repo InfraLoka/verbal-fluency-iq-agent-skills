@@ -1,4 +1,5 @@
 import sys
+
 sys.path.insert(0, "mcp-server")
 
 from tools.preprocess import detect_language, preprocess_text
@@ -56,6 +57,7 @@ def test_detect_empty_string_returns_fallback():
 
 def test_preprocess_invalid_lang_raises():
     import pytest
+
     with pytest.raises(ValueError):
         preprocess_text("hello world", "fr")
 

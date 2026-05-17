@@ -1,4 +1,5 @@
 import sys
+
 sys.path.insert(0, "mcp-server")
 
 from tools.preprocess import detect_language, preprocess_text
@@ -6,7 +7,12 @@ from tools.lexical import analyze_lexical
 from tools.syntactic import analyze_syntactic
 from tools.semantic import analyze_semantic
 from tools.readability import analyze_readability
-from tools.mapper import compute_verbal_fluency_score, predict_iq, predict_mental_age, estimate_education_level
+from tools.mapper import (
+    compute_verbal_fluency_score,
+    predict_iq,
+    predict_mental_age,
+    estimate_education_level,
+)
 from tools.reporter import generate_report
 
 EN_LONG = """
@@ -42,11 +48,20 @@ def _run_pipeline(text: str) -> dict:
     syn_r = analyze_syntactic(prep_r["sentences"], lang)
     sem_r = analyze_semantic(prep_r["text_clean"], prep_r["sentences"], lang)
     read_r = analyze_readability(prep_r["text_clean"], lang)
-    vfs_r = compute_verbal_fluency_score(lex_r, syn_r, sem_r, read_r, prep_r["word_count"], lang)
+    vfs_r = compute_verbal_fluency_score(
+        lex_r, syn_r, sem_r, read_r, prep_r["word_count"], lang
+    )
     iq_r = predict_iq(vfs_r["vfs"], vfs_r["confidence"])
     ma_r = predict_mental_age(iq_r["point_estimate"])
-    edu_r = estimate_education_level(read_r["gunning_fog"], read_r["ari"], lex_r["lexical_density"], syn_r["clause_density"])
-    report_r = generate_report(lang_r, prep_r, lex_r, syn_r, sem_r, read_r, vfs_r, iq_r, ma_r, edu_r, "--both")
+    edu_r = estimate_education_level(
+        read_r["gunning_fog"],
+        read_r["ari"],
+        lex_r["lexical_density"],
+        syn_r["clause_density"],
+    )
+    report_r = generate_report(
+        lang_r, prep_r, lex_r, syn_r, sem_r, read_r, vfs_r, iq_r, ma_r, edu_r, "--both"
+    )
     return {"vfs": vfs_r, "iq": iq_r, "edu": edu_r, "report": report_r}
 
 
@@ -87,7 +102,14 @@ def test_report_contains_research_basis():
 def test_json_output_has_all_top_level_keys():
     result = _run_pipeline(EN_LONG)
     j = result["report"]["json"]
-    for key in ("language", "verbal_fluency_score", "iq_prediction", "mental_age", "education_level", "metrics"):
+    for key in (
+        "language",
+        "verbal_fluency_score",
+        "iq_prediction",
+        "mental_age",
+        "education_level",
+        "metrics",
+    ):
         assert key in j
 
 

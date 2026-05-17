@@ -1,12 +1,22 @@
 import sys
+
 sys.path.insert(0, "mcp-server")
 
 from tools.syntactic import analyze_syntactic
 
 COMPLEX_SENTENCES = [
-    {"idx": 0, "text": "Although the data was inconclusive, the team proceeded because the deadline demanded immediate action."},
-    {"idx": 1, "text": "The report, which had been revised three times by external reviewers who questioned the methodology, was finally submitted."},
-    {"idx": 2, "text": "Researchers who study complex systems argue that emergent properties cannot be predicted from constituent parts alone."},
+    {
+        "idx": 0,
+        "text": "Although the data was inconclusive, the team proceeded because the deadline demanded immediate action.",
+    },
+    {
+        "idx": 1,
+        "text": "The report, which had been revised three times by external reviewers who questioned the methodology, was finally submitted.",
+    },
+    {
+        "idx": 2,
+        "text": "Researchers who study complex systems argue that emergent properties cannot be predicted from constituent parts alone.",
+    },
 ]
 
 SIMPLE_SENTENCES = [
@@ -18,8 +28,15 @@ SIMPLE_SENTENCES = [
 
 def test_returns_required_keys():
     result = analyze_syntactic(COMPLEX_SENTENCES, "en")
-    for key in ("mean_sentence_length", "clause_density", "subordination_index",
-                "dependency_depth", "passive_ratio", "score", "evidence"):
+    for key in (
+        "mean_sentence_length",
+        "clause_density",
+        "subordination_index",
+        "dependency_depth",
+        "passive_ratio",
+        "score",
+        "evidence",
+    ):
         assert key in result
 
 
