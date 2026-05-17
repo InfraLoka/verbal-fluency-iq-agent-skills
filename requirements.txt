@@ -1,0 +1,12 @@
+fastmcp>=0.4.0
+spacy>=3.7.0
+lexicalrichness>=0.4.2
+textstat>=0.7.3
+sentence-transformers>=2.6.0
+langdetect>=1.0.9
+langid>=1.1.6
+PySastrawi>=1.2.0
+nltk>=3.8.1
+scikit-learn>=1.4.0
+numpy>=1.26.0
+pytest>=8.0.0
