@@ -64,3 +64,6 @@ Thumbs.db
 # Logs
 *.log
 logs/
+
+# Private corpus (never commit)
+example/rahmat/

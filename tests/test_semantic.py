@@ -162,3 +162,32 @@ def test_semantic_metric_renamed_and_scaling_loaded_per_language(monkeypatch):
     id_after = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "id")
     assert en_after["score"] == result["score"]
     assert id_after["score"] != result["score"]
+
+
+def test_boundary_on_deduped_sentence_moves_to_next_kept_sentence():
+    # idx 2 starts a new document but is a near-duplicate of idx 1 and is
+    # removed; the seam must then be the next kept sentence (idx 3).
+    sentences = [
+        {"idx": 0, "text": "Dogs bark at night."},
+        {"idx": 1, "text": "The economy grew last quarter."},
+        {"idx": 2, "text": "The economy grew last quarter."},
+        {"idx": 3, "text": "Mountains are tall."},
+    ]
+    text = " ".join(s["text"] for s in sentences)
+    seg = analyze_semantic(text, sentences, "en", segment_boundaries=[2])
+    pairs = {(e["sentence_idx_from"], e["sentence_idx_to"]) for e in seg["evidence"]}
+    assert pairs == {(0, 1)}
+
+
+def test_all_transitions_cross_boundary_keeps_duplicate_stats():
+    sentences = [
+        {"idx": 0, "text": "Dogs bark at night."},
+        {"idx": 1, "text": "The economy grew last quarter."},
+        {"idx": 2, "text": "The economy grew last quarter."},
+        {"idx": 3, "text": "Mountains are tall."},
+    ]
+    text = " ".join(s["text"] for s in sentences)
+    result = analyze_semantic(text, sentences, "en", segment_boundaries=[1, 3])
+    assert result["adjacent_sentence_similarity"] is None
+    assert result["duplicate_sentences_removed"] == 1
+    assert result["duplicate_sentence_ratio"] == 0.25

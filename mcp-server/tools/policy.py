@@ -35,6 +35,8 @@ TEXT_STATUSES = frozenset(
     {UNSUPPORTED_LANGUAGE, MIXED_LANGUAGE, INSUFFICIENT_TEXT, INSUFFICIENT_STRUCTURE}
 )
 
+SUPPORTED_LANGUAGES = ("en", "id")
+REGIONAL_LANGUAGE_NAMES = {"jv": "Javanese", "su": "Sundanese"}
 PROVENANCE_VALUES = ("supervised_unaided", "unsupervised", "unknown")
 TEXT_TYPE_VALUES = ("formal_prose", "informal", "unknown")
 
@@ -96,6 +98,19 @@ def count_terminal_marks(text: str) -> int:
     return len(_TERMINAL_MARK_RE.findall(text or ""))
 
 
+def require_supported_language(lang: str) -> str:
+    """Return ``lang`` if it is an analysable language, else raise ValueError.
+
+    Every analyser calls this, so an unknown value is never silently scored with
+    the English path (G-026).
+    """
+    if lang not in SUPPORTED_LANGUAGES:
+        raise ValueError(
+            f"language must be one of {', '.join(SUPPORTED_LANGUAGES)}, got {lang!r}"
+        )
+    return lang
+
+
 def _require(value: str, allowed: tuple[str, ...], name: str) -> None:
     if value not in allowed:
         raise ValueError(f"{name} must be one of {allowed}, got {value!r}")
@@ -141,6 +156,22 @@ def evaluate_gates(
                 (
                     f"language detection confidence {confidence:.2f} is below "
                     f"{pol['min_lang_confidence']:.2f}"
+                ),
+            )
+        )
+
+    regional = lang_result.get("regional_function_word_share")
+    if regional is not None and regional > pol["max_regional_function_word_share"]:
+        name = REGIONAL_LANGUAGE_NAMES.get(
+            lang_result.get("regional_language") or "", "Regional-language"
+        )
+        issues.append(
+            (
+                UNSUPPORTED_LANGUAGE,
+                (
+                    f"{name} function words make up {regional:.2f} of words "
+                    f"(max {pol['max_regional_function_word_share']:.2f}); "
+                    "regional languages are not supported"
                 ),
             )
         )

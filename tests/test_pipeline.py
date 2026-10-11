@@ -50,7 +50,7 @@ def _run_pipeline(text: str) -> dict:
     lex_r = analyze_lexical(prep_r["tokens"], prep_r["sentences"], lang)
     syn_r = analyze_syntactic(prep_r["sentences"], lang)
     sem_r = analyze_semantic(prep_r["text_clean"], prep_r["sentences"], lang)
-    read_r = analyze_readability(prep_r["text_clean"], lang)
+    read_r = analyze_readability(prep_r["text_clean"], lang, prep_r["sentences"])
     vfs_r = compute_verbal_fluency_score(
         lex_r, syn_r, sem_r, read_r, prep_r["word_count"], lang
     )

@@ -265,3 +265,32 @@ def test_id_locative_written_solid_is_not_passive_but_suffixed_form_is():
     assert is_di_passive("dijalankan")
     assert is_di_passive("dirumahkan")
     assert not is_di_passive("dijalan")
+
+
+def test_syntactic_parses_sentences_in_one_pipe_pass(monkeypatch):
+    """G-027: one shared nlp.pipe pass over all sentences; models load once."""
+    from tools import models, syntactic
+
+    real = models.get_spacy("en")
+    calls = {"pipe": 0, "call": 0, "texts": 0}
+
+    class Spy:
+        def pipe(self, texts, **kwargs):
+            texts = list(texts)
+            calls["pipe"] += 1
+            calls["texts"] += len(texts)
+            return real.pipe(texts, **kwargs)
+
+        def __call__(self, text):
+            calls["call"] += 1
+            return real(text)
+
+    monkeypatch.setattr(syntactic.models, "get_spacy", lambda lang: Spy())
+    analyze_syntactic(COMPLEX_SENTENCES, "en")
+    assert calls == {"pipe": 1, "call": 0, "texts": len(COMPLEX_SENTENCES)}
+
+    monkeypatch.undo()
+    loads = models.LOAD_COUNTS["en_core_web_sm"]
+    analyze_syntactic(COMPLEX_SENTENCES, "en")
+    analyze_syntactic(SIMPLE_SENTENCES, "en")
+    assert models.LOAD_COUNTS["en_core_web_sm"] == loads

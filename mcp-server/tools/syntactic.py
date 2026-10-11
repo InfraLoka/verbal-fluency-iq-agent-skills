@@ -11,10 +11,11 @@ refused by ``tools.policy.assert_same_language``.
 import re
 from functools import lru_cache
 
-import spacy
 from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
 
-_nlp_cache: dict = {}
+from tools import models
+from tools.evidence import rank_evidence
+from tools.policy import require_supported_language
 
 SUBORDINATE_DEPS = {"advcl", "relcl", "acl", "csubj", "ccomp", "xcomp"}
 CLAUSE_DEPS = SUBORDINATE_DEPS | {"ROOT"}
@@ -234,13 +235,6 @@ _PASSIVE_SUFFIXES = ("kan", "i")
 _MIN_ROOT_LEN = 4
 
 
-def _get_nlp(lang: str):
-    if lang not in _nlp_cache:
-        model = "en_core_web_sm" if lang == "en" else "xx_ent_wiki_sm"
-        _nlp_cache[lang] = spacy.load(model)
-    return _nlp_cache[lang]
-
-
 @lru_cache(maxsize=1)
 def _sastrawi():
     """(root dictionary, stemmer) from PySastrawi's bundled kata-dasar list."""
@@ -380,19 +374,19 @@ def _analyze_syntactic_id(sentences: list[dict]) -> dict:
         if is_passive:
             passive_count += 1
 
-        triggered = []
+        triggered = [f"clauses:{1 + subs + coords}"]
         if subs >= 1:
             triggered.append(f"subordinators:{subs}")
         if is_passive:
             triggered.append(f"passive:{passives[0]}")
-        if triggered:
-            evidence.append(
-                {
-                    "sentence_idx": sent_data["idx"],
-                    "sentence": sent_data["text"],
-                    "triggered_by": triggered,
-                }
-            )
+        evidence.append(
+            {
+                "sentence_idx": sent_data["idx"],
+                "sentence": sent_data["text"],
+                "triggered_by": triggered,
+                "contribution": float(1 + subs + coords),
+            }
+        )
 
     n = len(sentences) or 1
     msl = round(sum(lengths) / n, 1)
@@ -419,7 +413,7 @@ def _analyze_syntactic_id(sentences: list[dict]) -> dict:
         "colloquial_forms_normalised": colloquial_total,
         "comparable_across_languages": False,
         "score": score,
-        "evidence": evidence[:3],
+        "evidence": rank_evidence(evidence),
         "note": (
             "Indonesian syntactic metrics computed via rule-based morphology; "
             "dependency depth not measured (no parser for id). " + NON_COMPARABLE_NOTE
@@ -428,16 +422,18 @@ def _analyze_syntactic_id(sentences: list[dict]) -> dict:
 
 
 def analyze_syntactic(sentences: list[dict], lang: str) -> dict:
+    require_supported_language(lang)
     if lang == "id":
         return _analyze_syntactic_id(sentences)
 
-    nlp = _get_nlp(lang)
+    nlp = models.get_spacy(lang)
     lengths, clause_counts, sub_counts, dep_depths = [], [], [], []
     passive_count = 0
     evidence = []
 
-    for sent_data in sentences:
-        doc = nlp(sent_data["text"])
+    # One batched pass over all sentences instead of one nlp() call each (G-027).
+    docs = nlp.pipe([s["text"] for s in sentences], batch_size=64)
+    for sent_data, doc in zip(sentences, docs, strict=True):
         words = [t for t in doc if not t.is_space and not t.is_punct]
         lengths.append(len(words))
 
@@ -454,21 +450,22 @@ def analyze_syntactic(sentences: list[dict], lang: str) -> dict:
         if is_passive:
             passive_count += 1
 
-        triggered = []
-        if subs >= 2:
+        triggered = [f"clauses:{max(1, clauses)}"]
+        if subs >= 1:
             triggered.append(f"subordinate_clauses:{subs}")
         if max_depth >= 6:
             triggered.append(f"dep_depth:{max_depth}")
         if is_passive:
             triggered.append("passive_voice")
-        if triggered:
-            evidence.append(
-                {
-                    "sentence_idx": sent_data["idx"],
-                    "sentence": sent_data["text"],
-                    "triggered_by": triggered,
-                }
-            )
+        evidence.append(
+            {
+                "sentence_idx": sent_data["idx"],
+                "sentence": sent_data["text"],
+                "triggered_by": triggered,
+                # Clauses first, depth as the tie-breaker.
+                "contribution": float(max(1, clauses)) + max_depth / 100,
+            }
+        )
 
     n = len(sentences)
     msl = round(sum(lengths) / n, 1) if n else 0
@@ -494,6 +491,6 @@ def analyze_syntactic(sentences: list[dict], lang: str) -> dict:
         "passive_ratio": passive_ratio,
         "comparable_across_languages": False,
         "score": score,
-        "evidence": evidence[:3],
+        "evidence": rank_evidence(evidence),
         "note": NON_COMPARABLE_NOTE,
     }

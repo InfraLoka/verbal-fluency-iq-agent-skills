@@ -14,14 +14,12 @@ import os
 from collections import defaultdict
 
 import numpy as np
-import spacy
-from sentence_transformers import SentenceTransformer
-from sklearn.metrics.pairwise import cosine_similarity
 
-from tools.policy import load_policy
+from tools import models
+from tools.evidence import rank_evidence
+from tools.policy import load_policy, require_supported_language
+from tools.robustness import dedupe_sentences
 
-_model_cache: dict = {}
-_nlp_cache: dict = {}
 _scaling_cache: dict = {}
 
 _CONFIG_DIR = os.path.join(os.path.dirname(__file__), "..", "config")
@@ -29,22 +27,6 @@ _CONFIG_DIR = os.path.join(os.path.dirname(__file__), "..", "config")
 # Nominal sub-weights; unavailable parts are dropped and the rest renormalised.
 SUB_WEIGHTS = {"similarity": 0.45, "drift": 0.25, "chain": 0.20}
 DRIFT_SCALE_MAX = 0.3
-
-
-def _get_model():
-    if "model" not in _model_cache:
-        _model_cache["model"] = SentenceTransformer(
-            "paraphrase-multilingual-MiniLM-L12-v2"
-        )
-    return _model_cache["model"]
-
-
-def _get_nlp(lang: str):
-    if lang not in _nlp_cache:
-        _nlp_cache[lang] = spacy.load(
-            "en_core_web_sm" if lang == "en" else "xx_ent_wiki_sm"
-        )
-    return _nlp_cache[lang]
 
 
 def _load_scaling() -> dict:
@@ -61,7 +43,7 @@ def _scaling_for(lang: str) -> dict:
 
 def _entity_labels(text: str, lang: str) -> list[str]:
     """Sorted distinct NER labels; label sets differ per model (informational)."""
-    return sorted({ent.label_ for ent in _get_nlp(lang)(text).ents})
+    return sorted({ent.label_ for ent in models.get_spacy(lang)(text).ents})
 
 
 def _unavailable(note: str) -> dict:
@@ -72,10 +54,31 @@ def _unavailable(note: str) -> dict:
         "entity_labels": [],
         "transitions": 0,
         "scaling_status": None,
+        "duplicate_sentences_removed": 0,
+        "duplicate_sentence_ratio": None,
         "score": None,
         "evidence": [],
         "note": note,
     }
+
+
+def _remap_boundaries(
+    original: list[dict], kept: list[dict], boundaries: list[int]
+) -> set[int]:
+    """A boundary on a removed duplicate moves to the next kept sentence."""
+    kept_idx = {s["idx"] for s in kept}
+    remapped: set[int] = set()
+    for b in boundaries:
+        if b in kept_idx:
+            remapped.add(b)
+            continue
+        nxt = next(
+            (s["idx"] for s in original if s["idx"] > b and s["idx"] in kept_idx),
+            None,
+        )
+        if nxt is not None:
+            remapped.add(nxt)
+    return remapped
 
 
 def analyze_semantic(
@@ -94,23 +97,40 @@ def analyze_semantic(
 
     The score is None (not an imputed 50) when it cannot be measured (F-016).
     """
+    require_supported_language(lang)
     pol = policy if policy is not None else load_policy()
+    total_sentences = len(sentences)
+    # Near-duplicate sentences would inflate similarity and chain density (G-036).
+    original = sentences
+    sentences, removed = dedupe_sentences(sentences)
     if len(sentences) < 2:
-        return _unavailable("Too few sentences for semantic analysis")
+        result = _unavailable("Too few distinct sentences for semantic analysis")
+        result["duplicate_sentences_removed"] = removed
+        if total_sentences:
+            result["duplicate_sentence_ratio"] = round(removed / total_sentences, 3)
+        return result
 
-    boundaries = set(segment_boundaries or [])
+    boundaries = _remap_boundaries(original, sentences, segment_boundaries or [])
 
-    model = _get_model()
     texts = [s["text"] for s in sentences]
-    embeddings = model.encode(texts)
+    # One batched encode; unit-length embeddings make each adjacent cosine a
+    # row-wise dot product (G-027).
+    embeddings = np.asarray(
+        models.get_sentence_model().encode(
+            texts,
+            batch_size=models.ENCODE_BATCH_SIZE,
+            normalize_embeddings=True,
+        )
+    )
+    adjacent = np.sum(embeddings[:-1] * embeddings[1:], axis=1)
 
     evidence = []
     similarities = []
-    for i in range(len(embeddings) - 1):
+    for i, raw in enumerate(adjacent):
         # Skip transitions that straddle a document boundary.
         if sentences[i + 1]["idx"] in boundaries:
             continue
-        sim = float(cosine_similarity([embeddings[i]], [embeddings[i + 1]])[0][0])
+        sim = float(raw)
         similarities.append(sim)
         note = (
             "high overlap"
@@ -125,14 +145,19 @@ def analyze_semantic(
                 "sentence_idx_to": sentences[i + 1]["idx"],
                 "similarity": round(sim, 3),
                 "note": note,
+                "contribution": round(sim, 3),
             }
         )
 
     if not similarities:
         # Every adjacent pair straddled a document boundary.
-        return _unavailable(
+        result = _unavailable(
             "No within-document transitions available for semantic analysis"
         )
+        result["duplicate_sentences_removed"] = removed
+        if total_sentences:
+            result["duplicate_sentence_ratio"] = round(removed / total_sentences, 3)
+        return result
 
     similarity = round(float(np.mean(similarities)), 3)
     # Drift is the spread of similarities; with too few transitions it is 0 by
@@ -170,6 +195,8 @@ def analyze_semantic(
         "entity_labels": _entity_labels(text, lang),
         "transitions": len(similarities),
         "scaling_status": _load_scaling()["status"],
+        "duplicate_sentences_removed": removed,
+        "duplicate_sentence_ratio": round(removed / total_sentences, 3),
         "score": score,
-        "evidence": evidence[:5],
+        "evidence": rank_evidence(evidence),
     }

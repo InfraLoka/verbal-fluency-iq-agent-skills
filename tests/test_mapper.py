@@ -1,4 +1,5 @@
 # Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
+import copy
 import json
 import math
 import pathlib
@@ -15,6 +16,13 @@ from tools.mapper import (
     iq_percentile,
     predict_iq,
     predict_mental_age,
+)
+from tools.norms import (
+    NormsConfigError,
+    load_edu_norms,
+    load_iq_norms,
+    validate_edu_norms,
+    validate_iq_norms,
 )
 from tools.policy import (
     CrossLanguageComparisonError,
@@ -306,3 +314,110 @@ def test_text_complexity_band_withheld_below_min_word_count():
     band = estimate_text_complexity_band(12.0, 11.0, 0.5, "en", gate=gate, policy=pol)
     assert band["text_complexity_band"] is None
     assert "INSUFFICIENT_TEXT" in band["withheld_reason"]
+
+
+# --- input validation and norms schema (phase 3) ---
+
+
+@pytest.mark.parametrize(
+    ("style_index", "band"),
+    [
+        (0.0, "Style band 1"),
+        (39.995, "Style band 1"),
+        (40.0, "Style band 2"),
+        (54.995, "Style band 2"),
+        (69.995, "Style band 3"),
+        (84.995, "Style band 4"),
+        (85.0, "Style band 5"),
+        (100.0, "Style band 5"),
+    ],
+)
+def test_predict_iq_gap_values_map_to_adjacent_band(style_index, band):
+    pol = validated_policy()
+    result = predict_iq(style_index, "en", gate=ok_gate(policy=pol), policy=pol)
+    assert result["style_band"] == band
+    assert result["classification"] == band
+    norms = json.loads(IQ_NORMS.read_text(encoding="utf-8"))
+    bounds = next(b for b in norms["bands"] if b["label"] == band)
+    assert bounds["iq_min"] <= result["point_estimate"] <= bounds["iq_max"]
+
+
+@pytest.mark.parametrize("bad", [150.0, 100.01, -5.0, -0.001, math.nan, math.inf])
+def test_predict_iq_rejects_out_of_range_inputs(bad):
+    with pytest.raises(ValueError, match="style_index"):
+        predict_iq(bad, "en", gate=ok_gate())
+    pol = validated_policy()
+    with pytest.raises(ValueError, match="style_index"):
+        predict_iq(bad, "en", gate=ok_gate(policy=pol), policy=pol)
+    assert predict_iq(None, "en")["withheld_reason"] == "style index unavailable"
+
+
+def _write(tmp_path, name, data):
+    path = tmp_path / name
+    path.write_text(json.dumps(data), encoding="utf-8")
+    return str(path)
+
+
+def test_norms_config_bands_are_contiguous_and_valid(tmp_path):
+    iq = json.loads(IQ_NORMS.read_text(encoding="utf-8"))
+    edu = json.loads(
+        pathlib.Path("mcp-server/config/edu_norms.json").read_text(encoding="utf-8")
+    )
+    validate_iq_norms(iq)
+    validate_edu_norms(edu)
+    assert load_iq_norms() == iq
+    assert load_edu_norms() == edu
+
+    def broken_iq(mutate):
+        data = copy.deepcopy(iq)
+        mutate(data)
+        return data
+
+    cases = {
+        "not contiguous": broken_iq(lambda d: d["bands"][1].update(vfs_max=84.99)),
+        "start at 0": broken_iq(lambda d: d["bands"][-1].update(vfs_min=1)),
+        "end at 100": broken_iq(lambda d: d["bands"][0].update(vfs_max=99)),
+        "missing keys": broken_iq(lambda d: d["bands"][2].pop("iq_min")),
+        "not increasing": broken_iq(lambda d: d["bands"][0].update(iq_min=100)),
+        "iq_sd": broken_iq(lambda d: d.update(iq_sd=0)),
+    }
+    for message, data in cases.items():
+        with pytest.raises(NormsConfigError, match=message):
+            validate_iq_norms(data)
+        with pytest.raises(NormsConfigError, match=message):
+            load_iq_norms(_write(tmp_path, "iq.json", data))
+
+    bad_edu = copy.deepcopy(edu)
+    bad_edu["bands"][3]["fog_min"] = 2
+    with pytest.raises(NormsConfigError, match="fog_min"):
+        load_edu_norms(_write(tmp_path, "edu.json", bad_edu))
+    with pytest.raises(NormsConfigError, match="no bands"):
+        validate_edu_norms({"bands": []})
+    with pytest.raises(NormsConfigError, match="no bands"):
+        validate_iq_norms({**iq, "bands": []})
+    gap_edu = copy.deepcopy(edu)
+    gap_edu["bands"][2]["band"] = 9
+    with pytest.raises(NormsConfigError, match="numbered"):
+        validate_edu_norms(gap_edu)
+
+
+def test_predict_mental_age_rejects_invalid_age():
+    for age in (-5, 0, 2, 121, 500, 12.5, True):
+        with pytest.raises(ValueError, match="chronological_age"):
+            predict_mental_age(120.0, age)
+    with pytest.raises(ValueError, match="iq_estimate"):
+        predict_mental_age(math.nan, 12)
+    assert predict_mental_age(120.0, 3)["mental_age"] == 3.6
+    assert predict_mental_age(120.0, 120)["mental_age"] is None
+    assert predict_mental_age(120.0, None)["age_assumed"] is False
+
+
+def test_style_index_and_iq_input_reject_str_bool_and_non_finite():
+    from tools.mapper import check_style_index
+
+    for bad in ("55", True, False, math.inf, -math.inf, math.nan):
+        with pytest.raises(ValueError, match="style_index"):
+            check_style_index(bad)
+        with pytest.raises(ValueError, match="iq_estimate"):
+            predict_mental_age(bad, 12)
+    assert check_style_index(55) == 55.0

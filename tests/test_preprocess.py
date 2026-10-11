@@ -96,3 +96,26 @@ def test_word_count_excludes_numeric_and_symbol_tokens():
 def test_preprocess_counts_terminal_marks():
     result = preprocess_text("One two. Three four! Five six? Seven", "en")
     assert result["terminal_mark_count"] == 3
+
+
+def test_preprocess_rejects_text_over_max_chars_with_clear_error(monkeypatch):
+    import pytest
+    from tools import models
+    from tools.preprocess import InputTooLargeError, check_input_size
+
+    def _no_model(lang):
+        raise AssertionError("spaCy must not run on oversized input")
+
+    monkeypatch.setattr(models, "get_spacy", _no_model)
+    too_big = "word " * 20001  # 100,005 characters
+    with pytest.raises(InputTooLargeError) as excinfo:
+        preprocess_text(too_big, "en")
+    message = str(excinfo.value)
+    assert "100005 characters" in message and "100000" in message
+    assert excinfo.value.code == "INPUT_TOO_LARGE"
+    assert isinstance(excinfo.value, ValueError)
+    with pytest.raises(InputTooLargeError):
+        detect_language(too_big)
+    check_input_size("x" * 100000)  # exactly at the limit is accepted
+    with pytest.raises(InputTooLargeError):
+        check_input_size("x" * 11, max_chars=10)

@@ -1,4 +1,6 @@
 {
+  "version": "2026-10-11",
+  "effective_date": "2026-10-11",
   "status": "uncalibrated",
   "note": "Linear 0-100 scaling of mean adjacent-sentence cosine similarity. Placeholder bounds carried over from the original code; to be replaced per language by the reference-corpus calibration in docs/validation/norming-plan.md.",
   "languages": {

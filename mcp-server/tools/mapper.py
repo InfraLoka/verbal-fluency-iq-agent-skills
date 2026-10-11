@@ -1,20 +1,18 @@
 # Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
-import json
+import copy
 import math
-import os
 import statistics
 
+from tools.norms import STYLE_INDEX_MAX, STYLE_INDEX_MIN, load_edu_norms, load_iq_norms
 from tools.policy import (
     STYLE_INDEX_LABEL,
     iq_validated,
     load_policy,
+    require_supported_language,
     withheld_reason,
 )
-
-_iq_norms = None
-_edu_norms = None
-
-_CONFIG_DIR = os.path.join(os.path.dirname(__file__), "..", "config")
+from tools.provenance import scoring_provenance
+from tools.robustness import assess
 
 # Nominal component weights of the style index (hand-set; see
 # docs/validation/effective-weights.md for what actually drives the index).
@@ -30,22 +28,29 @@ TEXT_COMPLEXITY_NOTE = (
     "Describes how difficult this text is to read, not the writer's education. "
     "Education cannot be inferred from text."
 )
+# Ages for which a ratio mental age may be requested (G-031).
+MIN_AGE = 3
+MAX_AGE = 120
 
 
-def _load_iq_norms() -> dict:
-    global _iq_norms
-    if _iq_norms is None:
-        with open(os.path.join(_CONFIG_DIR, "iq_norms.json"), encoding="utf-8") as f:
-            _iq_norms = json.load(f)
-    return _iq_norms
+def _finite_number(raw: object, field: str) -> float:
+    """A real, finite number; str and bool are refused, never coerced."""
+    if isinstance(raw, bool) or not isinstance(raw, (int, float)):
+        raise ValueError(f"{field} must be a number, got {raw!r}")  # noqa: TRY004
+    value = float(raw)
+    if not math.isfinite(value):
+        raise ValueError(f"{field} must be a finite number, got {raw!r}")
+    return value
 
 
-def _load_edu_norms() -> dict:
-    global _edu_norms
-    if _edu_norms is None:
-        with open(os.path.join(_CONFIG_DIR, "edu_norms.json"), encoding="utf-8") as f:
-            _edu_norms = json.load(f)
-    return _edu_norms
+def check_style_index(style_index: float) -> float:
+    """A finite number in [0, 100], or ValueError (G-008)."""
+    value = _finite_number(style_index, "style_index")
+    if not STYLE_INDEX_MIN <= value <= STYLE_INDEX_MAX:
+        raise ValueError(
+            f"style_index must be a finite number from 0 to 100, got {style_index!r}"
+        )
+    return value
 
 
 def _length_label(word_count: int) -> str:
@@ -69,6 +74,7 @@ def compute_verbal_fluency_score(
 ) -> dict:
     """Weighted style index. Unavailable components (score None) are dropped and
     the remaining nominal weights renormalised (F-016), never imputed."""
+    require_supported_language(lang)
     scores = {
         "lexical": lexical.get("score"),
         "syntactic": syntactic.get("score"),
@@ -97,20 +103,24 @@ def compute_verbal_fluency_score(
         "confidence_label": _length_label(word_count),
         "lang": lang,
         "text_length_words": word_count,
+        **assess(lexical, semantic),
+        "scoring_provenance": copy.deepcopy(scoring_provenance()),
     }
 
 
 def _band_for(style_index: float) -> dict:
-    bands = _load_iq_norms()["bands"]
+    """Half-open bands [vfs_min, vfs_max); the top band also includes 100."""
+    value = check_style_index(style_index)
+    bands = sorted(load_iq_norms()["bands"], key=lambda b: b["vfs_min"])
     for b in bands:
-        if b["vfs_min"] <= style_index <= b["vfs_max"]:
+        if b["vfs_min"] <= value < b["vfs_max"]:
             return b
-    return bands[0] if style_index > bands[0]["vfs_max"] else bands[-1]
+    return bands[-1]  # value == 100: validated norms end the top band at 100
 
 
 def iq_percentile(iq: float) -> int:
     """Percentile of an IQ point under N(100, 15), clamped to 1..99 (F-004)."""
-    norms = _load_iq_norms()
+    norms = load_iq_norms()
     z = (iq - norms["iq_mean"]) / norms["iq_sd"]
     pct = 50.0 * (1.0 + math.erf(z / math.sqrt(2.0)))
     return int(min(99, max(1, round(pct))))
@@ -127,6 +137,7 @@ def predict_iq(
     ``gate`` is the dict from ``tools.policy.evaluate_gates``. Without a gate,
     IQ is withheld: there is no way to request IQ without passing every check.
     """
+    require_supported_language(lang)
     pol = policy if policy is not None else load_policy()
     half_width = max(MIN_RANGE_HALF_WIDTH, int(pol["uncalibrated_range_half_width"]))
     result: dict = {
@@ -141,11 +152,13 @@ def predict_iq(
         "percentile": None,
         "withheld_reason": None,
         "language_norm_unvalidated": not iq_validated(lang, pol),
+        "scoring_provenance": copy.deepcopy(scoring_provenance()),
     }
     if style_index is None:
         result["withheld_reason"] = "style index unavailable"
         return result
 
+    style_index = check_style_index(style_index)
     band = _band_for(style_index)
     result["style_band"] = band["label"]
 
@@ -172,8 +185,23 @@ def predict_iq(
 def predict_mental_age(
     iq_estimate: float | None, chronological_age: int | None = None
 ) -> dict:
-    """Ratio mental age, only for a supplied age <= 16 (F-017). Never assumed."""
-    max_age = _load_iq_norms()["max_ratio_mental_age_years"]
+    """Ratio mental age, only for a supplied age <= 16 (F-017). Never assumed.
+
+    A supplied age must be an integer from 3 to 120 and a supplied IQ a finite
+    number; anything else raises ValueError and is never replaced (G-031).
+    """
+    if chronological_age is not None and (
+        isinstance(chronological_age, bool)
+        or not isinstance(chronological_age, int)
+        or not MIN_AGE <= chronological_age <= MAX_AGE
+    ):
+        raise ValueError(
+            f"chronological_age must be an integer from {MIN_AGE} to {MAX_AGE}, "
+            f"got {chronological_age!r}"
+        )
+    if iq_estimate is not None:
+        _finite_number(iq_estimate, "iq_estimate")
+    max_age = load_iq_norms()["max_ratio_mental_age_years"]
     result: dict = {
         "mental_age": None,
         "based_on_chronological_age": chronological_age,
@@ -212,6 +240,7 @@ def estimate_text_complexity_band(
 ) -> dict:
     """Median of per-metric complexity bands (F-014). Describes the text, not the
     writer's education (F-019); unavailable for uncalibrated languages (F-013)."""
+    require_supported_language(lang)
     result: dict = {
         "text_complexity_band": None,
         "label": None,
@@ -232,7 +261,7 @@ def estimate_text_complexity_band(
         )
         return result
 
-    bands = sorted(_load_edu_norms()["bands"], key=lambda b: b["band"])
+    bands = sorted(load_edu_norms()["bands"], key=lambda b: b["band"])
     per_metric = {
         "gunning_fog": _metric_band(gunning_fog, "fog_min", bands),
         "ari": _metric_band(ari, "ari_min", bands),

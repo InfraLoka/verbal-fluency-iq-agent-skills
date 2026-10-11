@@ -8,6 +8,11 @@ Dictionary filter (F-024): tokens that the ``wordfreq`` lexicon does not know
 (zipf_frequency == 0, e.g. typos and keyboard noise) are excluded from MATTR,
 MTLD and lexical density. Their share is ``oov_rate``; above 0.10 the result is
 flagged ``low_reliability`` and should be routed to human review.
+
+Nothing is swallowed silently (G-042): every metric that could not be computed
+is ``None`` and ``warnings`` says why (``vocd_failed: ...``, ``vocd_too_short``,
+``mtld_too_short``). Text without dictionary words returns the same keys with
+``error`` set and ``score`` None (G-012).
 """
 
 from collections import Counter
@@ -17,6 +22,10 @@ from lexicalrichness import LexicalRichness
 from spacy.lang.en.stop_words import STOP_WORDS as EN_STOP_WORDS
 from spacy.lang.id.stop_words import STOP_WORDS as ID_STOP_WORDS
 from wordfreq import zipf_frequency
+
+from tools.evidence import rank_evidence
+from tools.policy import require_supported_language
+from tools.robustness import repeated_ngram_share
 
 TOKEN_UNIT = "lowercased_surface_form"
 STOP_WORDS = {"en": EN_STOP_WORDS, "id": ID_STOP_WORDS}
@@ -49,10 +58,58 @@ def _scale(value: float, low: float, high: float) -> float:
     return min(100.0, max(0.0, (value - low) / (high - low) * 100))
 
 
+INSUFFICIENT_TEXT = "INSUFFICIENT_TEXT"
+
+
+def _not_measured(
+    error_message: str,
+    alpha_count: int,
+    oov_rate: float | None,
+    reliability_reasons: list[str],
+) -> dict:
+    """Full-shape result for text with no dictionary words (G-012)."""
+    return {
+        "mattr": None,
+        "mtld": None,
+        "vocd_d": None,
+        "lexical_density": None,
+        "avg_word_length": None,
+        "token_unit": TOKEN_UNIT,
+        "alpha_token_count": alpha_count,
+        "known_token_count": 0,
+        "oov_rate": oov_rate,
+        "rare_word_share": None,
+        "repeated_ngram_share": None,
+        "low_reliability": True,
+        "reliability_reasons": reliability_reasons,
+        "score_weights": {},
+        "score": None,
+        "evidence": [],
+        "warnings": [f"{INSUFFICIENT_TEXT.lower()}: {error_message}"],
+        "error": INSUFFICIENT_TEXT,
+    }
+
+
+def _vocd(known: list[str], warnings: list[str]) -> float | None:
+    if len(known) < MIN_VOCD_TOKENS:
+        warnings.append(
+            f"vocd_too_short: {len(known)} dictionary words; VOCD-D needs "
+            f"{MIN_VOCD_TOKENS}"
+        )
+        return None
+    try:
+        return round(float(LexicalRichness(" ".join(known)).vocd()), 1)
+    except (ArithmeticError, RuntimeError, TypeError, ValueError) as exc:
+        # Curve fitting fails with RuntimeError/ValueError: record it (G-042).
+        warnings.append(f"vocd_failed: {type(exc).__name__}: {exc}")
+        return None
+
+
 def analyze_lexical(tokens: list[str], sentences: list[dict], lang: str) -> dict:
+    require_supported_language(lang)
     alpha = [t.lower() for t in tokens if t.isalpha()]
     if not alpha:
-        return {"score": None, "error": "No alphabetic tokens found"}
+        return _not_measured("no alphabetic tokens", 0, None, [])
 
     known = [t for t in alpha if _zipf(t, lang) > 0]
     oov_rate = round(1 - len(known) / len(alpha), 3)
@@ -63,25 +120,21 @@ def analyze_lexical(tokens: list[str], sentences: list[dict], lang: str) -> dict
             f"(max {OOV_RELIABILITY_THRESHOLD:.2f}); route to human review"
         )
     if not known:
-        return {
-            "score": None,
-            "error": "No dictionary words found",
-            "oov_rate": oov_rate,
-            "low_reliability": True,
-            "reliability_reasons": reliability_reasons,
-            "token_unit": TOKEN_UNIT,
-        }
+        return _not_measured(
+            "no dictionary words", len(alpha), oov_rate, reliability_reasons
+        )
 
+    warnings: list[str] = []
     mattr = round(_mattr(known), 3)
     mtld = None
     if len(known) >= MIN_MTLD_TOKENS:
         mtld = round(float(LexicalRichness(" ".join(known)).mtld(threshold=0.72)), 1)
-    vocd_d = None
-    if len(known) >= MIN_VOCD_TOKENS:
-        try:
-            vocd_d = round(float(LexicalRichness(" ".join(known)).vocd()), 1)
-        except (ValueError, ZeroDivisionError):
-            vocd_d = None
+    else:
+        warnings.append(
+            f"mtld_too_short: {len(known)} dictionary words; MTLD needs "
+            f"{MIN_MTLD_TOKENS}"
+        )
+    vocd_d = _vocd(known, warnings)
 
     stop = STOP_WORDS[lang]
     lexical_density = round(sum(1 for t in known if t not in stop) / len(known), 3)
@@ -97,22 +150,26 @@ def analyze_lexical(tokens: list[str], sentences: list[dict], lang: str) -> dict
     score = round(sum(parts[k] * SCORE_WEIGHTS[k] for k in parts) / total_weight, 1)
 
     freq = Counter(known)
-    evidence = []
+    candidates = []
     for sent in sentences:
         words = [w.lower() for w in sent["text"].split() if w.isalpha()]
+        if not words:
+            continue
         rare = [
             w
             for w in words
             if freq.get(w, 0) == 1 and len(w) > 5 and 0 < _zipf(w, lang) < RARE_ZIPF_MAX
         ]
-        if rare:
-            evidence.append(
-                {
-                    "sentence_idx": sent["idx"],
-                    "sentence": sent["text"],
-                    "triggered_by": [f"rare:{w}" for w in rare[:3]],
-                }
-            )
+        share = round(len(rare) / len(words), 3)
+        candidates.append(
+            {
+                "sentence_idx": sent["idx"],
+                "sentence": sent["text"],
+                "triggered_by": [f"rare:{w}" for w in rare[:3]]
+                + [f"rare_share:{share}"],
+                "contribution": share,
+            }
+        )
 
     return {
         "mattr": mattr,
@@ -124,9 +181,16 @@ def analyze_lexical(tokens: list[str], sentences: list[dict], lang: str) -> dict
         "alpha_token_count": len(alpha),
         "known_token_count": len(known),
         "oov_rate": oov_rate,
+        # Robustness inputs (tools.robustness), not scored.
+        "rare_word_share": round(
+            sum(1 for t in known if _zipf(t, lang) < RARE_ZIPF_MAX) / len(known), 3
+        ),
+        "repeated_ngram_share": repeated_ngram_share(alpha),
         "low_reliability": bool(reliability_reasons),
         "reliability_reasons": reliability_reasons,
         "score_weights": {k: SCORE_WEIGHTS[k] for k in parts},
         "score": score,
-        "evidence": evidence[:3],
+        "evidence": rank_evidence(candidates),
+        "warnings": warnings,
+        "error": None,
     }

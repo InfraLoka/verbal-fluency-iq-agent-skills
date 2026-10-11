@@ -1,6 +1,11 @@
 {
-  "schema_version": "2.0",
+  "schema_version": "3.0",
   "mcp_server": "verbal-fluency-mcp",
+  "signing": "Every tool output carries input_sha256 (SHA-256 of the analysed text) `kind` (the name of the tool that produced it, inside the signed payload) and _sig (HMAC-SHA256). Pass outputs to later tools unchanged; edited, unsigned, wrong-kind or mixed-text inputs are refused. VF_SIGNING_KEY shorter than 32 bytes stops the server at start-up (CONFIG_ERROR).",
+  "errors": {
+    "shape": { "error": "string", "field": "string|null", "message": "string" },
+    "codes": ["INVALID_JSON", "INVALID_SHAPE", "INVALID_LANGUAGE", "INVALID_VALUE", "INPUT_TOO_LARGE", "MODEL_UNAVAILABLE", "UNSIGNED_INPUT", "TAMPERED_INPUT", "INPUT_MISMATCH", "WRONG_KIND", "LANG_MISMATCH", "CONFIG_ERROR"]
+  },
   "tools": [
     {
       "name": "tool_detect_language",
@@ -8,7 +13,7 @@
       "parameters": {
         "text": { "type": "string", "required": true }
       },
-      "returns": { "lang": "string", "confidence": "number", "supported": "boolean", "mixed_language_share": "number|null" }
+      "returns": { "lang": "string", "confidence": "number", "supported": "boolean", "mixed_language_share": "number|null", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_preprocess_text",
@@ -17,58 +22,55 @@
         "text": { "type": "string", "required": true },
         "lang": { "type": "string", "enum": ["en", "id"], "required": true }
       },
-      "returns": { "tokens": "array", "sentences": "array", "word_count": "integer", "token_count": "integer", "terminal_mark_count": "integer", "sentence_count": "integer", "text_clean": "string" }
+      "returns": { "lang": "string", "tokens": "array", "sentences": "array", "word_count": "integer", "token_count": "integer", "terminal_mark_count": "integer", "sentence_count": "integer", "text_clean": "string", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_evaluate_gates",
-      "description": "Apply validity gates; the returned JSON is the gate_json required by tool_predict_iq, tool_estimate_text_complexity_band and tool_generate_report",
+      "description": "Apply validity gates; the returned JSON is the gate_json required by tool_predict_iq, tool_predict_mental_age, tool_estimate_text_complexity_band and tool_generate_report",
       "parameters": {
         "lang_result_json": { "type": "string", "required": true },
-        "word_count": { "type": "integer", "required": true },
-        "terminal_mark_count": { "type": "integer", "required": true },
+        "preprocess_result_json": { "type": "string", "default": "" },
         "provenance": { "type": "string", "enum": ["supervised_unaided", "unsupervised", "unknown"], "default": "unknown" },
         "text_type": { "type": "string", "enum": ["formal_prose", "informal", "unknown"], "default": "unknown" }
       },
-      "returns": { "status": "string", "statuses": "array", "reasons": "array", "iq_allowed": "boolean", "text_ok": "boolean", "education_allowed": "boolean", "language_norm_unvalidated": "boolean", "lang": "string", "provenance": "string", "text_type": "string", "policy_version": "string" }
+      "returns": { "status": "string", "statuses": "array", "reasons": "array", "iq_allowed": "boolean", "text_ok": "boolean", "education_allowed": "boolean", "language_norm_unvalidated": "boolean", "lang": "string", "provenance": "string", "text_type": "string", "policy_version": "string", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_analyze_lexical",
       "description": "Compute MATTR, MTLD, content-word density and out-of-dictionary rate with sentence evidence",
       "parameters": {
-        "tokens_json": { "type": "string", "required": true },
-        "sentences_json": { "type": "string", "required": true },
-        "lang": { "type": "string", "required": true }
+        "preprocess_result_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "enum": ["en", "id"], "required": true }
       },
-      "returns": { "mattr": "number", "mtld": "number|null", "vocd_d": "number|null", "lexical_density": "number", "avg_word_length": "number", "token_unit": "string", "oov_rate": "number", "low_reliability": "boolean", "reliability_reasons": "array", "score_weights": "object", "score": "number|null", "evidence": "array" }
+      "returns": { "mattr": "number|null", "mtld": "number|null", "vocd_d": "number|null", "lexical_density": "number|null", "avg_word_length": "number|null", "token_unit": "string", "oov_rate": "number|null", "low_reliability": "boolean", "reliability_reasons": "array", "score_weights": "object", "score": "number|null", "evidence": "array", "warnings": "array", "error": "string|null", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_analyze_syntactic",
       "description": "Compute clause density, subordination index, dependency depth (en only); not comparable across languages",
       "parameters": {
-        "sentences_json": { "type": "string", "required": true },
-        "lang": { "type": "string", "required": true }
+        "preprocess_result_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "enum": ["en", "id"], "required": true }
       },
-      "returns": { "mean_sentence_length": "number", "clause_density": "number", "subordination_index": "number", "dependency_depth": "number|null", "passive_ratio": "number", "comparable_across_languages": "boolean", "score": "number", "evidence": "array", "note": "string" }
+      "returns": { "mean_sentence_length": "number", "clause_density": "number", "subordination_index": "number", "dependency_depth": "number|null", "passive_ratio": "number", "comparable_across_languages": "boolean", "score": "number", "evidence": "array", "note": "string", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_analyze_semantic",
       "description": "Compute adjacent-sentence similarity, topic drift (5+ transitions) and lexical chain density; entity labels are informational",
       "parameters": {
-        "text": { "type": "string", "required": true },
-        "sentences_json": { "type": "string", "required": true },
-        "lang": { "type": "string", "required": true },
+        "preprocess_result_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "enum": ["en", "id"], "required": true },
         "segment_boundaries_json": { "type": "string", "default": "" }
       },
-      "returns": { "adjacent_sentence_similarity": "number|null", "topic_drift_index": "number|null", "lexical_chain_density": "number|null", "entity_labels": "array", "transitions": "integer", "scaling_status": "string|null", "score": "number|null", "evidence": "array" }
+      "returns": { "adjacent_sentence_similarity": "number|null", "topic_drift_index": "number|null", "lexical_chain_density": "number|null", "entity_labels": "array", "transitions": "integer", "scaling_status": "string|null", "score": "number|null", "evidence": "array", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_analyze_readability",
       "description": "Compute Flesch, Gunning Fog, ARI, Coleman-Liau readability indices",
       "parameters": {
-        "text": { "type": "string", "required": true },
-        "lang": { "type": "string", "required": true }
+        "preprocess_result_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "enum": ["en", "id"], "required": true }
       },
-      "returns": { "flesch_reading_ease": "number", "gunning_fog": "number", "ari": "number", "coleman_liau": "number", "score": "number", "evidence": "array" }
+      "returns": { "flesch_reading_ease": "number", "gunning_fog": "number", "ari": "number", "coleman_liau": "number", "score": "number", "evidence": "array", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_compute_verbal_fluency_score",
@@ -78,46 +80,45 @@
         "syntactic_json": { "type": "string", "required": true },
         "semantic_json": { "type": "string", "required": true },
         "readability_json": { "type": "string", "required": true },
-        "word_count": { "type": "integer", "required": true },
-        "lang": { "type": "string", "required": true }
+        "preprocess_result_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "enum": ["en", "id"], "required": true }
       },
-      "returns": { "vfs": "number|null", "style_index": "number|null", "style_index_label": "string", "lexical": "number|null", "syntactic": "number|null", "semantic": "number|null", "readability": "number|null", "weights_used": "object", "unavailable_components": "array", "confidence_label": "string", "lang": "string", "text_length_words": "integer" }
+      "returns": { "vfs": "number|null", "style_index": "number|null", "style_index_label": "string", "lexical": "number|null", "syntactic": "number|null", "semantic": "number|null", "readability": "number|null", "weights_used": "object", "unavailable_components": "array", "confidence_label": "string", "lang": "string", "text_length_words": "integer", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_predict_iq",
       "description": "Neutral style band always; experimental IQ only when gate status is OK and the language is validated, otherwise null with withheld_reason",
       "parameters": {
-        "style_index": { "type": "number", "required": true },
-        "lang": { "type": "string", "required": true },
+        "vfs_result_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "enum": ["en", "id"], "required": true },
         "gate_json": { "type": "string", "default": "" }
       },
-      "returns": { "style_index": "number", "style_index_label": "string", "style_band": "string|null", "point_estimate": "integer|null", "range_low": "integer|null", "range_high": "integer|null", "range_label": "string", "classification": "string|null", "percentile": "integer|null", "withheld_reason": "string|null", "language_norm_unvalidated": "boolean" }
+      "returns": { "style_index": "number|null", "style_index_label": "string", "style_band": "string|null", "point_estimate": "integer|null", "range_low": "integer|null", "range_high": "integer|null", "range_label": "string", "classification": "string|null", "percentile": "integer|null", "withheld_reason": "string|null", "language_norm_unvalidated": "boolean", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_predict_mental_age",
-      "description": "Ratio mental age only for an emitted IQ, an IQ-allowing gate and a supplied age of 16 or less; never assumes an age",
+      "description": "Ratio mental age only for an emitted IQ, an IQ-allowing gate and a supplied age of 16 or less; chronological_age 0 means not supplied, otherwise 3-120",
       "parameters": {
-        "iq_estimate": { "type": "number", "default": -1.0 },
+        "iq_result_json": { "type": "string", "required": true },
         "chronological_age": { "type": "integer", "default": 0 },
         "gate_json": { "type": "string", "default": "" }
       },
-      "returns": { "mental_age": "number|null", "based_on_chronological_age": "integer|null", "age_assumed": "boolean", "withheld_reason": "string|null", "formula": "string" }
+      "returns": { "mental_age": "number|null", "based_on_chronological_age": "integer|null", "age_assumed": "boolean", "withheld_reason": "string|null", "formula": "string", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_estimate_text_complexity_band",
       "description": "Text complexity band (median of per-metric bands); describes the text, not the writer's education; unavailable for id",
       "parameters": {
-        "gunning_fog": { "type": "number", "required": true },
-        "ari": { "type": "number", "required": true },
-        "lexical_density": { "type": "number", "required": true },
-        "lang": { "type": "string", "required": true },
+        "readability_json": { "type": "string", "required": true },
+        "lexical_json": { "type": "string", "required": true },
+        "lang": { "type": "string", "enum": ["en", "id"], "required": true },
         "gate_json": { "type": "string", "default": "" }
       },
-      "returns": { "text_complexity_band": "integer|null", "label": "string|null", "per_metric_bands": "object|null", "consistency": "string|null", "withheld_reason": "string|null", "note": "string" }
+      "returns": { "text_complexity_band": "integer|null", "label": "string|null", "per_metric_bands": "object|null", "consistency": "string|null", "withheld_reason": "string|null", "note": "string", "input_sha256": "string", "kind": "string", "_sig": "string" }
     },
     {
       "name": "tool_generate_report",
-      "description": "Generate JSON and/or report with status, reasons, provenance caveat and sentence-level evidence",
+      "description": "Generate JSON and/or report with status, reasons, provenance caveat, input hash and sentence-level evidence",
       "parameters": {
         "lang_result_json": { "type": "string", "required": true },
         "preprocess_result_json": { "type": "string", "required": true },
@@ -132,9 +133,10 @@
         "format_flag": { "type": "string", "enum": ["--json", "--report", "--both", "--scores-only", "--verbose-caveats"], "default": "--both" },
         "chronological_age": { "type": "integer", "default": 0 },
         "verbose_caveats": { "type": "boolean", "default": false },
-        "gate_json": { "type": "string", "default": "" }
+        "gate_json": { "type": "string", "default": "" },
+        "generated_at": { "type": "string", "default": "", "description": "empty or ISO date YYYY-MM-DD" }
       },
-      "returns": { "json": "object|null", "report": "string|null" }
+      "returns": { "json": "object|null", "report": "string|null", "input_sha256": "string", "kind": "string", "_sig": "string" }
     }
   ]
 }

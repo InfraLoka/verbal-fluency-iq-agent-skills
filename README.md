@@ -100,7 +100,7 @@ verbal-fluency-iq/
 
 ## Installation
 
-Requires Python 3.10+.
+Requires Python 3.13 or 3.14 (both are tested in CI).
 
 ```bash
 # Clone and enter the project
@@ -111,12 +111,9 @@ cd verbal-fluency-iq
 python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 
-# Install dependencies
-pip install -r requirements.txt
-
-# Download spaCy models
-python -m spacy download en_core_web_sm
-python -m spacy download xx_ent_wiki_sm
+# Install pinned dependencies, test tools and the spaCy models
+# (requirements.lock pins every transitive package too)
+pip install -r requirements.txt -r requirements-dev.txt -r requirements-models.txt -c requirements.lock
 
 # Run tests
 venv/bin/python -m pytest tests/ -v
@@ -124,20 +121,25 @@ venv/bin/python -m pytest tests/ -v
 
 ### Dependencies
 
+Every dependency is pinned to an exact version so that scores cannot change with a library upgrade. `requirements.lock` pins the full transitive set and is used as a constraints file; the lock is generated on macOS, so the Linux CPU/GPU extras of torch may differ (follow-up); `requirements-models.txt` pins the spaCy models by version and SHA-256.
+
 | Package | Purpose |
 |---|---|
-| `fastmcp>=0.4.0` | MCP server framework |
-| `spacy>=3.7.0` | Tokenisation, dependency parsing, NER |
-| `sentence-transformers>=2.6.0` | Sentence embeddings for semantic analysis |
-| `lexicalrichness>=0.4.2` | MTLD and VOCD-D computation |
-| `wordfreq>=3.1.1` | Dictionary filter for misspellings (bundled en/id data) |
-| `textstat>=0.7.3` | Readability indices (EN) |
-| `langdetect>=1.0.9` | Language detection (agreement check) |
-| `langid>=1.1.6` | Language detection (primary) and code-switching detection |
-| `PySastrawi>=1.2.0` | Indonesian root dictionary for passive and verb detection |
-| `scikit-learn>=1.4.0` | Cosine similarity for semantic coherence |
-| `numpy>=1.26.0` | Numerical operations |
-| `nltk>=3.8.1` | Tokenisation utilities |
+| `fastmcp==4.1.0` | MCP server framework |
+| `spacy==3.8.16` | Tokenisation, dependency parsing, NER |
+| `sentence-transformers==6.1.0` | Sentence embeddings for semantic analysis |
+| `lexicalrichness==0.5.1` | MTLD and VOCD-D computation |
+| `wordfreq==3.1.1` | Dictionary filter for misspellings (bundled en/id data) |
+| `textstat==0.7.13` | Readability indices (EN) |
+| `langdetect==1.0.9` | Language detection (agreement check) |
+| `langid==1.1.6` | Language detection (primary) and code-switching detection |
+| `PySastrawi==1.2.1` | Indonesian root dictionary for passive and verb detection |
+| `scikit-learn==1.9.1` | Required by sentence-transformers |
+| `numpy==2.5.4` | Numerical operations |
+| `nltk==3.10.3` | Required by textstat and lexicalrichness |
+| `en_core_web_sm==3.8.0`, `xx_ent_wiki_sm==3.8.0` | spaCy models (`requirements-models.txt`) |
+
+To upgrade a dependency, change its pin, regenerate `requirements.lock` with `pip freeze --exclude-editable | grep -v ' @ ' > requirements.lock` in a clean environment, and review the golden-score diff before merging.
 
 ---
 
@@ -150,6 +152,14 @@ venv/bin/python mcp-server/server.py
 ```
 
 The server runs on stdio transport (compatible with Claude Code's MCP integration).
+
+Set `VF_SIGNING_KEY` to a long random secret if tool outputs must stay valid across server restarts (see [The 12 MCP Tools](#the-12-mcp-tools)).
+
+**Operational log.** The server writes one JSON line per tool call to stderr (stdout carries the MCP protocol): the tool, `outcome` (`ok`, `error` or `crash`), the error code and field, the SHA-256 and character count of the input, the language decision (language, confidence, supported, mixed-language share), statuses, warning codes, the scoring version and the duration. Model loads are logged with the model name, revision and load time. The analysed text, tokens, sentences and error messages are never logged.
+
+```json
+{"duration_ms": 41.2, "event": "tool_call", "input_sha256": "9f2c…", "lang_decision": {"confidence": 1.0, "lang": "en", "mixed_language_share": 0.0, "supported": true}, "level": "INFO", "logger": "verbal_fluency.server", "outcome": "ok", "scoring_version": "3.0.0", "tool": "tool_detect_language", "ts": "2026-10-11T09:00:00"}
+```
 
 ### Configure in Claude Code
 
@@ -183,7 +193,23 @@ Analyze this text --report --age=25 --verbose-caveats: "<paste text here>"
 
 ## The 12 MCP Tools
 
-All tools communicate via JSON strings. The server serialises every return value to `str` (JSON) and the AI passes these strings directly as arguments to subsequent tools. The gate JSON from Tool 3 must be passed to Tools 9, 11 and 12; without it every screening output is withheld.
+All tools communicate via JSON strings. The server serialises every return value to `str` (JSON) and the AI passes these strings directly as arguments to subsequent tools. The gate JSON from Tool 3 must be passed to Tools 9, 10, 11 and 12; without it every screening output is withheld.
+
+**Evidence.** Each analyser scores every sentence (semantic: every transition) by its contribution to the metric and returns the two strongest (`rank: "strongest"`) and the two weakest (`rank: "weakest"`) with their `contribution`, instead of the first sentences that happened to trigger. The report labels each piece of evidence with its rank and sentence number.
+
+**Signed outputs.** Every tool output carries `input_sha256` (the SHA-256 of the analysed text), `kind` (the tool that produced it) and `_sig`, an HMAC-SHA256 signature made by the server. Tools that take an earlier output verify its signature and refuse an input that is unsigned (`UNSIGNED_INPUT`), edited (`TAMPERED_INPUT`), passed to the wrong argument (`WRONG_KIND`) or produced from a different text (`INPUT_MISMATCH`). The key is read from the `VF_SIGNING_KEY` environment variable; without it the server generates a random key at start-up and logs a warning, so signatures are then valid only within one server process and a restart invalidates earlier outputs. Set `VF_SIGNING_KEY` to a long random secret (at least 32 bytes; a shorter value stops the server at start-up with `CONFIG_ERROR`) when outputs must survive a restart.
+
+**Errors.** A tool never raises to the client. A failure returns `{"error": CODE, "field": NAME, "message": TEXT}` with one of these codes:
+
+| Code | Meaning |
+|---|---|
+| `INVALID_JSON` | A `*_json` argument is not valid JSON |
+| `INVALID_SHAPE` | Valid JSON of the wrong shape (for example an array where an object is expected) |
+| `INVALID_LANGUAGE` | `lang` is not `en` or `id` |
+| `INVALID_VALUE` | A value is out of range (for example `chronological_age`) or `lang` disagrees with the input |
+| `INPUT_TOO_LARGE` | The text is longer than `max_chars` |
+| `MODEL_UNAVAILABLE` | A spaCy or embedding model is not installed |
+| `UNSIGNED_INPUT`, `TAMPERED_INPUT`, `WRONG_KIND`, `INPUT_MISMATCH` | See *Signed outputs* above |
 
 ---
 
@@ -214,7 +240,7 @@ All tools communicate via JSON strings. The server serialises every return value
 
 ### Tool 2 — `tool_preprocess_text`
 
-**Input:** `text` (`str`), `lang` (`"en"` or `"id"`; anything else raises an error).
+**Input:** `text` (`str`), `lang` (`"en"` or `"id"`; anything else returns `INVALID_LANGUAGE`).
 
 **Output:**
 
@@ -247,8 +273,7 @@ Applies every validity gate. Its JSON output is the `gate_json` argument of Tool
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `lang_result_json` | `str` | — | Output of Tool 1 |
-| `word_count` | `int` | — | `word_count` from Tool 2 |
-| `terminal_mark_count` | `int` | — | `terminal_mark_count` from Tool 2 |
+| `preprocess_result_json` | `str` | `""` | Output of Tool 2; empty only when the language is unsupported (0 words) |
 | `provenance` | `str` | `"unknown"` | `supervised_unaided`, `unsupervised` or `unknown` |
 | `text_type` | `str` | `"unknown"` | `formal_prose`, `informal` or `unknown` |
 
@@ -291,7 +316,7 @@ Applies every validity gate. Its JSON output is the `gate_json` argument of Tool
 
 ### Tool 4 — `tool_analyze_lexical`
 
-**Input:** `tokens_json`, `sentences_json`, `lang`.
+**Input:** `preprocess_result_json` (output of Tool 2), `lang`.
 
 **Output:**
 
@@ -316,9 +341,13 @@ Applies every validity gate. Its JSON output is the `gate_json` argument of Tool
       "sentence": "The epistemological framework...",
       "triggered_by": ["rare:epistemological"]
     }
-  ]
+  ],
+  "warnings": [],
+  "error": null
 }
 ```
+
+`warnings` names every metric that could not be computed and why (`vocd_too_short`, `mtld_too_short`, `vocd_failed: <error>`); the report prints the reason next to the metric. Text without dictionary words returns the same keys with `score: null` and `error: "INSUFFICIENT_TEXT"`.
 
 | Metric | Description |
 |---|---|
@@ -335,7 +364,7 @@ Both languages use lowercased surface forms for every diversity metric; no stemm
 
 ### Tool 5 — `tool_analyze_syntactic`
 
-**Input:** `sentences_json`, `lang`.
+**Input:** `preprocess_result_json`, `lang`.
 
 **Output:**
 
@@ -371,7 +400,7 @@ Both languages use lowercased surface forms for every diversity metric; no stemm
 
 ### Tool 6 — `tool_analyze_semantic`
 
-**Input:** `text`, `sentences_json`, `lang`, optional `segment_boundaries_json` (sentence idx values where a new document starts; transitions across them are skipped).
+**Input:** `preprocess_result_json`, `lang`, optional `segment_boundaries_json` (JSON array of sentence idx integers where a new document starts; transitions across them are skipped).
 
 **Output:**
 
@@ -397,13 +426,13 @@ Both languages use lowercased surface forms for every diversity metric; no stemm
 | Lexical chain density | Share of words (> 4 chars) recurring across sentences |
 | Entity labels | NER labels, informational only and never scored |
 
-Fewer than 2 sentences (or no within-document transitions) gives `score: null`, which the style index handles by renormalising weights.
+Near-duplicate sentences (word-set overlap ≥ 0.8 with an earlier sentence) are removed before similarity and chain density are computed, so repeating a sentence cannot raise either; the result reports `duplicate_sentences_removed` and `duplicate_sentence_ratio`. Fewer than 2 distinct sentences (or no within-document transitions) gives `score: null`, which the style index handles by renormalising weights.
 
 ---
 
 ### Tool 7 — `tool_analyze_readability`
 
-**Input:** `text` (cleaned text from Tool 2), `lang`.
+**Input:** `preprocess_result_json`, `lang`.
 
 **Output:**
 
@@ -426,7 +455,7 @@ Fewer than 2 sentences (or no within-document transitions) gives `score: null`, 
 
 **Indonesian:** Flesch uses a vowel-nucleus syllable counter (`_count_id_syllables`) with the English coefficients. Gunning Fog, ARI and Coleman-Liau are English formulas computed by `textstat` for both languages, which is why the text complexity band is unavailable for Indonesian.
 
-**Evidence trigger:** sentences where polysyllabic word density ≥ 0.30.
+**Evidence:** every preprocess sentence is scored by polysyllabic word density and cited by its preprocess `idx`, so readability S-numbers match the other analysers (abbreviations such as "Dr." and decimals such as "3.5" no longer split sentences). The Indonesian Flesch formula uses the same sentence count.
 
 ---
 
@@ -434,7 +463,7 @@ Fewer than 2 sentences (or no within-document transitions) gives `score: null`, 
 
 Combines the four component scores into the style index (the tool keeps its historical name).
 
-**Input:** `lexical_json`, `syntactic_json`, `semantic_json`, `readability_json`, `word_count`, `lang`.
+**Input:** `lexical_json`, `syntactic_json`, `semantic_json`, `readability_json`, `preprocess_result_json`, `lang`. All five JSON inputs must be signed outputs for the same text.
 
 **Output:**
 
@@ -451,9 +480,24 @@ Combines the four component scores into the style index (the tool keeps its hist
   "unavailable_components": [],
   "confidence_label": "HIGH",
   "lang": "en",
-  "text_length_words": 650
+  "text_length_words": 650,
+  "review_flags": [],
+  "review_reasons": [],
+  "low_reliability": false,
+  "scoring_provenance": {
+    "scoring_version": "3.0.0",
+    "config_sha256": {"validation.json": "…", "iq_norms.json": "…", "edu_norms.json": "…", "semantic_scaling.json": "…", "id_syllables.json": "…"},
+    "norms": {"iq_norms.json": {"version": "2026-10-11", "effective_date": "2026-10-11"}, "…": "…"},
+    "libraries": {"spacy": "3.8.16", "sentence-transformers": "6.1.0", "textstat": "0.7.13", "…": "…"},
+    "models": {
+      "spacy": {"en": "en_core_web_sm", "id": "xx_ent_wiki_sm"},
+      "sentence_transformer": {"name": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2", "revision": "e8f8c211226b894fcb81acc59f3b34ba3efd5f42"}
+    }
+  }
 }
 ```
+
+`scoring_provenance` ties the score to the algorithm and data that produced it: the scoring version, the SHA-256 of every config file, the version and effective date of each norms file, and the library and model versions. Tool 9 and the report carry the same block, and the report prints it under *Scoring provenance*. The scoring version is bumped whenever a weight, threshold, norm or scoring rule changes, so scores with different versions must not be compared.
 
 `confidence_label` is an ordinal text-length tier (VERY LOW < 30 words, LOW < 100, MEDIUM < 300, HIGH otherwise). No numeric confidence is produced.
 
@@ -461,7 +505,7 @@ Combines the four component scores into the style index (the tool keeps its hist
 
 ### Tool 9 — `tool_predict_iq`
 
-**Input:** `style_index` (`float`), `lang` (`str`), `gate_json` (`str`, output of Tool 3; empty string = no gate = withheld).
+**Input:** `vfs_result_json` (signed output of Tool 8), `lang` (`str`), `gate_json` (`str`, output of Tool 3; empty string = no gate = withheld). A raw number cannot be passed, so a caller cannot ask for the IQ of a made-up style index.
 
 **Output (shipped configuration):**
 
@@ -487,7 +531,7 @@ When the gate status is `OK` and the language is `iq_validated`, `point_estimate
 
 ### Tool 10 — `tool_predict_mental_age`
 
-**Input:** `iq_estimate` (`float`; pass `-1` when IQ was withheld), `chronological_age` (`int`; `0` = not supplied).
+**Input:** `iq_result_json` (signed output of Tool 9), `chronological_age` (`int`; `0` = not supplied, otherwise 3–120), `gate_json`.
 
 **Output:**
 
@@ -507,7 +551,7 @@ Reported only for an emitted IQ and a supplied age of 16 or less.
 
 ### Tool 11 — `tool_estimate_text_complexity_band`
 
-**Input:** `gunning_fog`, `ari`, `lexical_density`, `lang`, `gate_json`.
+**Input:** `readability_json` (Tool 7), `lexical_json` (Tool 4), `lang`, `gate_json`.
 
 **Output:**
 
@@ -528,7 +572,7 @@ Unavailable (all fields `null` with `withheld_reason`) for Indonesian, and whene
 
 ### Tool 12 — `tool_generate_report`
 
-**Input:** the outputs of Tools 1, 2, 4, 5, 6, 7, 8, 9, 10 and 11, plus:
+**Input:** the signed outputs of Tools 1, 2, 4, 5, 6, 7, 8, 9, 10 and 11 for one text, plus:
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
@@ -537,7 +581,7 @@ Unavailable (all fields `null` with `withheld_reason`) for Indonesian, and whene
 | `verbose_caveats` | `bool` | `false` | Append extended limitations block |
 | `gate_json` | `str` | `""` | Output of Tool 3; without it the report says `Status: UNVERIFIED` and `Provenance: not attested` |
 
-**Output:** `{"json": {...}, "report": "..."}`; either may be `null` depending on `format_flag`. The JSON carries `status`, `reasons`, `provenance`, `notice`, `language` (with `language_norm_unvalidated`), `style_index`, `iq_prediction`, `mental_age`, `text_complexity` and `metrics`.
+**Output:** `{"json": {...}, "report": "..."}`; either may be `null` depending on `format_flag`. The JSON carries `status`, `reasons`, `input_sha256`, `provenance`, `notice`, `language` (with `language_norm_unvalidated`), `style_index`, `iq_prediction`, `mental_age`, `text_complexity` and `metrics`.
 
 ---
 
@@ -628,11 +672,13 @@ readability_score = fog×0.35 + ari×0.30 + cl×0.20 + flesch×0.15
 
 | Style index | Style band | Experimental IQ range (withheld unless validated) |
 |---|---|---|
-| 85–100 | Style band 5 | 125–145 |
-| 70–84.99 | Style band 4 | 110–124 |
-| 55–69.99 | Style band 3 | 90–109 |
-| 40–54.99 | Style band 2 | 75–89 |
-| 0–39.99 | Style band 1 | 55–74 |
+| 85 ≤ index ≤ 100 | Style band 5 | 125–145 |
+| 70 ≤ index < 85 | Style band 4 | 110–124 |
+| 55 ≤ index < 70 | Style band 3 | 90–109 |
+| 40 ≤ index < 55 | Style band 2 | 75–89 |
+| 0 ≤ index < 40 | Style band 1 | 55–74 |
+
+Bands are half-open, so every value from 0 to 100 (for example 84.995) falls in exactly one band. A style index outside 0–100, or not a finite number, is rejected with an error. The norms files are checked when they are loaded: bands must be contiguous, cover 0–100 and have rising IQ ranges, and complexity-band thresholds must rise with the band; a malformed file stops the server with a clear message instead of mis-scoring.
 
 Style bands are neutral ordinal labels. They are not psychometric classifications and carry no clinical meaning. The band table is hand-set and uncalibrated.
 
@@ -656,7 +702,7 @@ A complexity band describes how difficult the text is to read. It is **not** the
 
 ### Mental age
 
-The ratio model `mental_age = (iq / 100) × chronological_age` is undefined for adults. Mental age is reported only when an IQ was emitted and a chronological age of 16 or less was supplied; it is never computed from an assumed age.
+The ratio model `mental_age = (iq / 100) × chronological_age` is undefined for adults. Mental age is reported only when an IQ was emitted and a chronological age of 16 or less was supplied; it is never computed from an assumed age. A supplied age must be a whole number from 3 to 120; any other value is rejected with an error rather than replaced.
 
 ---
 
@@ -693,7 +739,7 @@ The `.agent/` folder makes this skill portable across AI agents without vendor l
 - Prompt flag parsing rules
 - Status handling: withheld fields are reported with their reasons
 
-**`.agent/tools.json`** — JSON Schema contracts for all 12 tools, vendor-neutral.
+**`.agent/tools.json`** — JSON Schema contracts for all 12 tools, vendor-neutral, plus the structured error shape and codes.
 
 ### Using on Different Agents
 
@@ -729,14 +775,19 @@ The validity policy. Every gate threshold lives here, and IQ output for a langua
   "max_mixed_language_share": 0.20,
   "max_words_per_terminal_mark": 40,
   "uncalibrated_range_half_width": 25,
-  "min_drift_transitions": 5
+  "min_drift_transitions": 5,
+  "max_chars": 100000
 }
 ```
+
+`max_chars` caps the size of one input. Longer texts are refused with an `INPUT_TOO_LARGE` error before any model runs; split them and analyse each part separately.
 
 ### `mcp-server/config/iq_norms.json`
 
 ```json
 {
+  "version": "2026-10-11",
+  "effective_date": "2026-10-11",
   "status": "uncalibrated: hand-set bands with no norm sample (see docs/validation/validation-protocol.md)",
   "note": "Labels are neutral ordinal style bands, not psychometric classifications.",
   "bands": [
@@ -772,6 +823,18 @@ Despite the historical file name, these are text complexity bands, not education
 ### `mcp-server/config/semantic_scaling.json`
 
 Per-language bounds for scaling mean adjacent-sentence similarity to 0–100. Both languages currently use the uncalibrated 0.3–0.9 bounds, and the file is marked `"status": "uncalibrated"`.
+
+### `mcp-server/config/robustness.json`
+
+Thresholds for the review flags on Tool 8 (`review_flags`, `review_reasons`, `low_reliability`). A flag never changes a score; it marks the result low reliability and asks for human review.
+
+| Flag | Raised when |
+|---|---|
+| `vocabulary_stuffing` | lexical score ≥ 60 and more than 15% of words are rare (Zipf frequency < 3.5), or adjacent sentences barely relate (mean similarity < 0.15) |
+| `sentence_repetition` | more than 20% of sentences are near-duplicates of earlier ones |
+| `ngram_padding` | more than 20% of word trigrams repeat |
+
+The thresholds are uncalibrated and set with a wide margin over the synthetic reference corpus, none of whose passages is flagged. Passing every check does not make a score tamper-proof.
 
 ### `mcp-server/config/id_syllables.json`
 
@@ -862,7 +925,7 @@ Contains vowel characters and diphthong patterns used by the Indonesian syllable
 
 **Not an intelligence measure.** The style index measures lexical-syntactic complexity of one text. It has no criterion validation against any standardised ability test (WAIS-IV, Raven's Progressive Matrices, etc.), so IQ output is withheld by default. The validation study that would be required is specified in `docs/validation/validation-protocol.md`; the reference population and norm groups in `docs/validation/norming-plan.md`.
 
-**It rewards complexity, not quality.** Every component rises with longer words, longer sentences, rarer words and more subordination. Correctness, relevance and argument quality are not measured, and padding with jargon raises the index. `docs/validation/effective-weights.md` shows how much of the index is explained by plain length statistics.
+**It rewards complexity, not quality.** Every component rises with longer words, longer sentences, rarer words and more subordination. Correctness, relevance and argument quality are not measured, and padding with jargon raises the index. Obvious gaming (stacked rare words, repeated sentences, repeated phrases) is flagged for human review, but the index is not tamper-resistant. `docs/validation/effective-weights.md` shows how much of the index is explained by plain length statistics.
 
 **No numeric confidence is a probability.** Length tiers and language-detection labels are ordinal heuristics and are never shown as percentages. The interval around an experimental IQ is an uncalibrated heuristic range (at least ±25 points), not a 95% confidence interval.
 

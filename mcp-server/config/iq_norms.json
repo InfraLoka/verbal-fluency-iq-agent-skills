@@ -1,6 +1,8 @@
 {
+  "version": "2026-10-11",
+  "effective_date": "2026-10-11",
   "status": "uncalibrated: hand-set bands with no norm sample (see docs/validation/validation-protocol.md)",
-  "note": "Labels are neutral ordinal style bands, not psychometric classifications.",
+  "note": "Labels are neutral ordinal style bands, not psychometric classifications. Bands are half-open: vfs_min <= style index < vfs_max, except the top band, which includes 100.",
   "bands": [
     {
       "vfs_min": 85, "vfs_max": 100,
@@ -8,22 +10,22 @@
       "label": "Style band 5"
     },
     {
-      "vfs_min": 70, "vfs_max": 84.99,
+      "vfs_min": 70, "vfs_max": 85,
       "iq_min": 110, "iq_max": 124,
       "label": "Style band 4"
     },
     {
-      "vfs_min": 55, "vfs_max": 69.99,
+      "vfs_min": 55, "vfs_max": 70,
       "iq_min": 90, "iq_max": 109,
       "label": "Style band 3"
     },
     {
-      "vfs_min": 40, "vfs_max": 54.99,
+      "vfs_min": 40, "vfs_max": 55,
       "iq_min": 75, "iq_max": 89,
       "label": "Style band 2"
     },
     {
-      "vfs_min": 0, "vfs_max": 39.99,
+      "vfs_min": 0, "vfs_max": 40,
       "iq_min": 55, "iq_max": 74,
       "label": "Style band 1"
     }

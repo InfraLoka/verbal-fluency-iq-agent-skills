@@ -9,5 +9,7 @@
   "max_mixed_language_share": 0.20,
   "max_words_per_terminal_mark": 40,
   "uncalibrated_range_half_width": 25,
-  "min_drift_transitions": 5
+  "min_drift_transitions": 5,
+  "max_chars": 100000,
+  "max_regional_function_word_share": 0.15
 }

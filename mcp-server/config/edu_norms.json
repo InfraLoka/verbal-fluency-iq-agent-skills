@@ -1,4 +1,6 @@
 {
+  "version": "2026-10-11",
+  "effective_date": "2026-10-11",
   "status": "uncalibrated: hand-set thresholds with no norm sample",
   "note": "Text complexity bands describe how difficult a text is to read. They are not the writer's education level; education cannot be inferred from text.",
   "bands": [

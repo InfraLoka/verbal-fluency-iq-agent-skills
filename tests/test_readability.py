@@ -3,6 +3,7 @@ import sys
 
 sys.path.insert(0, "mcp-server")
 
+from tools.preprocess import preprocess_text
 from tools.readability import analyze_readability
 
 COMPLEX_TEXT = (
@@ -22,8 +23,13 @@ ID_TEXT = (
 )
 
 
+def _read(text: str, lang: str) -> dict:
+    prep = preprocess_text(text, lang)
+    return analyze_readability(prep["text_clean"], lang, prep["sentences"])
+
+
 def test_returns_required_keys():
-    result = analyze_readability(COMPLEX_TEXT, "en")
+    result = _read(COMPLEX_TEXT, "en")
     for key in (
         "flesch_reading_ease",
         "gunning_fog",
@@ -36,24 +42,24 @@ def test_returns_required_keys():
 
 
 def test_complex_text_higher_fog_than_simple():
-    complex_r = analyze_readability(COMPLEX_TEXT, "en")
-    simple_r = analyze_readability(SIMPLE_TEXT, "en")
+    complex_r = _read(COMPLEX_TEXT, "en")
+    simple_r = _read(SIMPLE_TEXT, "en")
     assert complex_r["gunning_fog"] > simple_r["gunning_fog"]
 
 
 def test_score_between_0_and_100():
-    result = analyze_readability(COMPLEX_TEXT, "en")
+    result = _read(COMPLEX_TEXT, "en")
     assert 0 <= result["score"] <= 100
 
 
 def test_indonesian_text_runs_without_error():
-    result = analyze_readability(ID_TEXT, "id")
+    result = _read(ID_TEXT, "id")
     assert "score" in result
     assert result["score"] >= 0
 
 
 def test_evidence_contains_polysyllabic_trigger():
-    result = analyze_readability(COMPLEX_TEXT, "en")
+    result = _read(COMPLEX_TEXT, "en")
     if result["evidence"]:
         for ev in result["evidence"]:
             assert "sentence_idx" in ev

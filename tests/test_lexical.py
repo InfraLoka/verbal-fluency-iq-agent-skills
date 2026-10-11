@@ -109,7 +109,8 @@ def test_evidence_contains_sentence_idx_and_triggered_by():
         assert "sentence_idx" in ev
         assert "sentence" in ev
         assert ev["triggered_by"]
-        assert all(t.startswith("rare:") for t in ev["triggered_by"])
+        assert all(t.startswith(("rare:", "rare_share:")) for t in ev["triggered_by"])
+        assert ev["rank"] in {"strongest", "weakest"}
 
 
 def test_empty_tokens_returns_error():
@@ -196,7 +197,7 @@ def _style_index(text: str) -> tuple[float, dict]:
     lex = analyze_lexical(prep["tokens"], prep["sentences"], "en")
     syn = analyze_syntactic(prep["sentences"], "en")
     sem = analyze_semantic(prep["text_clean"], prep["sentences"], "en")
-    read = analyze_readability(prep["text_clean"], "en")
+    read = analyze_readability(prep["text_clean"], "en", prep["sentences"])
     vfs = compute_verbal_fluency_score(lex, syn, sem, read, prep["word_count"], "en")
     return vfs["style_index"], lex
 
@@ -210,3 +211,75 @@ def test_vfs_stable_across_truncation_lengths_within_tolerance():
         # The length-biased hapax ratio is gone; MTLD is the diversity measure.
         assert "hapax_ratio" not in lex
         assert lex["mtld"] is not None
+
+
+def test_lexical_reports_warning_when_vocd_fails(monkeypatch):
+    from lexicalrichness import LexicalRichness
+    from tools.policy import evaluate_gates
+    from tools.reporter import generate_report
+
+    def _fail(self, *args, **kwargs):
+        raise RuntimeError("Optimal parameters not found")
+
+    monkeypatch.setattr(LexicalRichness, "vocd", _fail)
+    prep = preprocess_text(corpus_text("en_news_report"), "en")
+    lex = analyze_lexical(prep["tokens"], prep["sentences"], "en")
+    assert lex["vocd_d"] is None
+    assert lex["mtld"] is not None
+    assert lex["warnings"] == [
+        "vocd_failed: RuntimeError: Optimal parameters not found"
+    ]
+    assert lex["error"] is None
+
+    short = analyze_lexical(SIMPLE_TOKENS[:5], SENTENCES, "en")
+    assert any(
+        w.startswith("vocd_too_short: 5 dictionary words") for w in short["warnings"]
+    )
+    assert any(w.startswith("mtld_too_short") for w in short["warnings"])
+
+    lang = {
+        "lang": "en",
+        "confidence": 0.99,
+        "supported": True,
+        "mixed_language_share": 0.0,
+    }
+    syn = analyze_syntactic(prep["sentences"], "en")
+    sem = analyze_semantic(prep["text_clean"], prep["sentences"], "en")
+    read = analyze_readability(prep["text_clean"], "en", prep["sentences"])
+    vfs = compute_verbal_fluency_score(lex, syn, sem, read, prep["word_count"], "en")
+    report = generate_report(
+        lang,
+        prep,
+        lex,
+        syn,
+        sem,
+        read,
+        vfs,
+        {
+            "style_index": vfs["style_index"],
+            "style_band": None,
+            "point_estimate": None,
+            "range_label": "uncalibrated heuristic range",
+            "withheld_reason": "x",
+        },
+        {"mental_age": None, "withheld_reason": "x"},
+        {"text_complexity_band": None, "withheld_reason": "x", "note": "n"},
+        "--report",
+        gate=evaluate_gates(lang, prep["word_count"], prep["terminal_mark_count"]),
+    )["report"]
+    assert (
+        "VOCD-D                : not measured "
+        "(vocd_failed: RuntimeError: Optimal parameters not found)"
+    ) in report
+    assert "< 50 words" not in report
+
+
+def test_empty_lexical_result_has_full_shape_and_error_code():
+    full = set(analyze_lexical(RICH_TOKENS, SENTENCES, "en"))
+    for tokens in ([], ["12345", "!!!"], ["qzxv", "wkpf"]):
+        result = analyze_lexical(tokens, SENTENCES, "en")
+        assert set(result) == full
+        assert result["error"] == "INSUFFICIENT_TEXT"
+        assert result["score"] is None
+        assert result["lexical_density"] is None
+        assert result["warnings"][0].startswith("insufficient_text: ")

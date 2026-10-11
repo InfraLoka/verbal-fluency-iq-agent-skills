@@ -1,0 +1,12 @@
+{
+  "version": "2026-10-11",
+  "status": "uncalibrated: hand-set thresholds with a wide margin over the synthetic reference corpus (max rare-word share 0.04, max repeated-trigram share 0.02, no duplicate sentences)",
+  "note": "Flags route a text to human review and mark it low reliability. They do not change any score. Passing every check does not make a score tamper-proof.",
+  "near_duplicate_jaccard": 0.8,
+  "max_duplicate_sentence_ratio": 0.2,
+  "ngram_n": 3,
+  "max_repeated_ngram_share": 0.2,
+  "stuffing_min_lexical_score": 60,
+  "max_rare_word_share": 0.15,
+  "min_adjacent_similarity": 0.15
+}

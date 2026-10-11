@@ -62,6 +62,8 @@ def test_validation_config_ships_with_every_language_unvalidated():
     assert cfg["max_words_per_terminal_mark"] == 40
     assert cfg["uncalibrated_range_half_width"] == 25
     assert cfg["min_drift_transitions"] == 5
+    assert cfg["max_chars"] == 100000
+    assert cfg["max_regional_function_word_share"] == 0.15
 
 
 def test_load_policy_returns_independent_copies():

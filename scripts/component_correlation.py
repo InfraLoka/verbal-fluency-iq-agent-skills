@@ -39,7 +39,7 @@ def score_passage(text: str, lang: str) -> dict:
     lex = analyze_lexical(prep["tokens"], prep["sentences"], lang)
     syn = analyze_syntactic(prep["sentences"], lang)
     sem = analyze_semantic(prep["text_clean"], prep["sentences"], lang)
-    read = analyze_readability(prep["text_clean"], lang)
+    read = analyze_readability(prep["text_clean"], lang, prep["sentences"])
     vfs = compute_verbal_fluency_score(lex, syn, sem, read, prep["word_count"], lang)
     return {
         **{c: vfs[c] for c in COMPONENTS},

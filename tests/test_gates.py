@@ -141,3 +141,85 @@ def test_pipeline_returns_no_style_index_for_text_without_words(text):
     assert result["style_index"] is None
     assert result["components"] is None
     _assert_screening_withheld(result)
+
+
+@pytest.mark.parametrize("text", ["", "12345 6789 !!!", "!!! ??? ...", "😀"])
+def test_pipeline_rejects_empty_or_nonalpha_text(text):
+    from tools.lexical import analyze_lexical
+    from tools.mapper import compute_verbal_fluency_score, estimate_text_complexity_band
+
+    result = run_pipeline(text)
+    assert result["style_index"] is None
+    assert result["components"] is None
+    assert result["word_count"] == 0
+    assert set(result["statuses"]) & {"UNSUPPORTED_LANGUAGE", "INSUFFICIENT_TEXT"}
+    assert result["reasons"]
+    _assert_screening_withheld(result)
+
+    lex = analyze_lexical(text.split(), [], "en")
+    assert lex["error"] == "INSUFFICIENT_TEXT"
+    vfs = compute_verbal_fluency_score(
+        lex, {"score": None}, {"score": None}, {"score": None}, 0, "en"
+    )
+    assert vfs["style_index"] is None
+    assert vfs["unavailable_components"] == [
+        "lexical",
+        "readability",
+        "semantic",
+        "syntactic",
+    ]
+    gate = evaluate_gates({"lang": "en", "confidence": 0.0}, 0, 0)
+    band = estimate_text_complexity_band(
+        0.0, 0.0, lex["lexical_density"], "en", gate=gate
+    )
+    assert band["text_complexity_band"] is None
+
+
+# Follow-up to F-006: repetitive Javanese that langid labels Indonesian.
+JAVANESE_REPETITIVE = (
+    "Aku arep lunga menyang pasar karo ibu. Wong-wong padha teka saka desa sebelah. "
+    * 20
+)
+SUNDANESE = (
+    "Abdi teu acan terang naon anu kedah dilakukeun ku urang dinten ieu. Kumaha "
+    "upami urang angkat ka pasar jeung anjeun? Abdi mah geus siap ti tadi isuk. "
+    "Urang teu kedah buru-buru, sabab pasar teh dibuka dugi ka sonten. Anjeun "
+    "hoyong meser naon di pasar engke?"
+)
+
+
+def test_regional_language_function_words_are_refused():
+    from tools.preprocess import detect_language, regional_function_word_share
+
+    lang_r = detect_language(JAVANESE_REPETITIVE)
+    assert lang_r["lang"] == "id"  # the regression: langid calls it Indonesian
+    assert lang_r["regional_language"] == "jv"
+    assert lang_r["regional_function_word_share"] == 0.5
+    assert lang_r["supported"] is False
+    result = run_pipeline(JAVANESE_REPETITIVE, policy=validated_policy())
+    assert result["status"] == "UNSUPPORTED_LANGUAGE"
+    assert result["style_index"] is None
+    assert any(
+        r.startswith("UNSUPPORTED_LANGUAGE: Javanese function words make up 0.50")
+        for r in result["reasons"]
+    )
+    _assert_screening_withheld(result)
+
+    assert regional_function_word_share(SUNDANESE)[0] == "su"
+    assert regional_function_word_share(SUNDANESE)[1] > 0.15
+    sundanese = run_pipeline(SUNDANESE, policy=validated_policy())
+    assert sundanese["status"] == "UNSUPPORTED_LANGUAGE"
+    assert sundanese["style_index"] is None
+    assert any("Sundanese function words" in r for r in sundanese["reasons"])
+
+    assert regional_function_word_share("") == (None, None)
+    assert regional_function_word_share("The cat sat.") == (None, 0.0)
+
+
+@pytest.mark.parametrize(
+    "name", ["id_academic_essay", "id_news_report", "id_informal_chat", "en_opinion"]
+)
+def test_reference_corpus_is_not_refused_as_regional_language(name):
+    result = run_pipeline(corpus_text(name), policy=validated_policy())
+    assert not any("function words" in r for r in result["reasons"]), name
+    assert result["style_index"] is not None

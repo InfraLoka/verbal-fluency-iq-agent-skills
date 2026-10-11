@@ -1,6 +1,9 @@
 # Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
 import textstat
 
+from tools.evidence import rank_evidence
+from tools.policy import require_supported_language
+
 
 def _count_id_syllables(word: str) -> int:
     vowels = set("aeiouAEIOU")
@@ -19,35 +22,31 @@ def _syllable_count(word: str, lang: str) -> int:
     return textstat.syllable_count(word)
 
 
-def analyze_readability(text: str, lang: str) -> dict:
+def analyze_readability(text: str, lang: str, sentences: list[dict]) -> dict:
+    """Readability indices of ``text``; evidence cites ``sentences`` (the
+    preprocess sentences, so S-numbers match every other analyser, G-038)."""
+    require_supported_language(lang)
     textstat.set_lang("en_US")
 
-    sentences = [
-        s.strip()
-        for s in text.replace("!", ".").replace("?", ".").split(".")
-        if s.strip()
-    ]
-
-    evidence = []
-    for i, sent in enumerate(sentences[:20]):
-        words = sent.split()
+    candidates = []
+    for sent in sentences:
+        words = sent["text"].split()
         if not words:
             continue
         polysyllabic = sum(1 for w in words if _syllable_count(w, lang) >= 3)
         density = round(polysyllabic / len(words), 2)
-        if density >= 0.3:
-            evidence.append(
-                {
-                    "sentence_idx": i,
-                    "sentence": sent,
-                    "triggered_by": [f"polysyllabic_density:{density}"],
-                }
-            )
+        candidates.append(
+            {
+                "sentence_idx": sent["idx"],
+                "sentence": sent["text"],
+                "triggered_by": [f"polysyllabic_density:{density}"],
+                "contribution": density,
+            }
+        )
 
     if lang == "id":
         words_all = text.split()
-        sents_clean = [s for s in sentences if s]
-        avg_sent_len = len(words_all) / max(1, len(sents_clean))
+        avg_sent_len = len(words_all) / max(1, len(sentences))
         avg_syl = sum(_count_id_syllables(w) for w in words_all) / max(
             1, len(words_all)
         )
@@ -74,5 +73,5 @@ def analyze_readability(text: str, lang: str) -> dict:
         "ari": ari,
         "coleman_liau": cl,
         "score": score,
-        "evidence": evidence[:3],
+        "evidence": rank_evidence(candidates),
     }

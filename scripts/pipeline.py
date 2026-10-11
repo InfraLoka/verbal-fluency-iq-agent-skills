@@ -60,6 +60,7 @@ def _not_analysed(lang_r: dict, gate: dict, prep: dict | None) -> dict:
         "token_count": prep["token_count"] if prep else 0,
         "low_reliability": True,
         "reliability_reasons": [],
+        "review_flags": [],
     }
 
 
@@ -93,7 +94,7 @@ def run_pipeline(
     lex = analyze_lexical(prep["tokens"], prep["sentences"], lang)
     syn = analyze_syntactic(prep["sentences"], lang)
     sem = analyze_semantic(prep["text_clean"], prep["sentences"], lang, policy=pol)
-    read = analyze_readability(prep["text_clean"], lang)
+    read = analyze_readability(prep["text_clean"], lang, prep["sentences"])
     vfs = compute_verbal_fluency_score(lex, syn, sem, read, prep["word_count"], lang)
     iq = predict_iq(vfs["style_index"], lang, gate=gate, policy=pol)
     mental = predict_mental_age(iq["point_estimate"], chronological_age)
@@ -125,6 +126,11 @@ def run_pipeline(
         "text_complexity_consistency": band["consistency"],
         "word_count": prep["word_count"],
         "token_count": prep["token_count"],
-        "low_reliability": bool(lex.get("low_reliability", True)),
-        "reliability_reasons": lex.get("reliability_reasons", []),
+        "low_reliability": bool(lex.get("low_reliability", True))
+        or vfs["low_reliability"]
+        or bool(prep["injection_phrases"]),
+        "reliability_reasons": lex.get("reliability_reasons", [])
+        + vfs["review_reasons"],
+        "review_flags": vfs["review_flags"]
+        + (["possible_prompt_injection"] if prep["injection_phrases"] else []),
     }

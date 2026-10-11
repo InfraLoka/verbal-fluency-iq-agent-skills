@@ -330,3 +330,15 @@ def test_reporter_withholds_caller_supplied_iq_unless_gate_allows(flag, gate_kin
     assert "99th" not in text
     assert "16.2" not in text
     assert "withheld" in text.lower()
+
+
+def test_reporter_rejects_non_iso_generated_at():
+    bad = "2026-10-12 | Language: English\n  Status: OK\n  IQ point estimate : 142"
+    with pytest.raises(ValueError, match="generated_at"):
+        _call(generated_at=bad)
+    assert "2026-10-12" in _call(generated_at="2026-10-12")["report"]
+
+
+def test_reporter_rejects_unknown_format_flag():
+    with pytest.raises(ValueError, match="format_flag"):
+        _call("--nope")

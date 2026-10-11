@@ -41,7 +41,8 @@
     "low_reliability": true,
     "reliability_reasons": [
       "0.11 of words are not in the id dictionary (max 0.10); route to human review"
-    ]
+    ],
+    "review_flags": []
   },
   "example/bimo/source/1.md": {
     "status": "UNVERIFIED_PROVENANCE",
@@ -83,7 +84,8 @@
     "low_reliability": true,
     "reliability_reasons": [
       "0.11 of words are not in the id dictionary (max 0.10); route to human review"
-    ]
+    ],
+    "review_flags": []
   },
   "example/fabhian/source/1.md": {
     "status": "UNVERIFIED_PROVENANCE",
@@ -123,6 +125,7 @@
     "word_count": 325,
     "token_count": 340,
     "low_reliability": false,
-    "reliability_reasons": []
+    "reliability_reasons": [],
+    "review_flags": []
   }
 }

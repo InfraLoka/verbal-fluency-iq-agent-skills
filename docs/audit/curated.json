@@ -1576,7 +1576,7 @@
     "fix": "Use half-open intervals (vfs_min <= vfs < next min) with the top band closed, and raise on out-of-range input instead of defaulting to the last band.",
     "acceptance_test": "test_predict_iq_gap_values_map_to_adjacent_band",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1613,7 +1613,7 @@
     "fix": "Validate ranges at the tool boundary and in mapper functions; raise ValueError with a clear message; clamp percentile to 1-99.",
     "acceptance_test": "test_predict_iq_rejects_out_of_range_inputs",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1640,7 +1640,7 @@
     "fix": "Pin mcp/fastmcp to a tested range, add tests/test_server.py that imports server and calls every tool, and lock dependencies.",
     "acceptance_test": "test_server_module_imports_and_registers_all_tools",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1682,7 +1682,7 @@
     "fix": "Pin exact versions (pip-compile lockfile), run CI against the lock, and record dependency and model versions in every report.",
     "acceptance_test": "test_requirements_are_pinned_with_exact_versions",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1719,7 +1719,7 @@
     "fix": "Add version/effective_date to norms files, a scoring_version constant, norms_sha256, and library/spaCy/sentence-transformer versions to vfs/iq/report outputs; bump on any weight or norm change.",
     "acceptance_test": "test_report_includes_scoring_and_norms_version",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1746,7 +1746,7 @@
     "fix": "Return a typed InsufficientText result (score None) and make downstream tools refuse to score; add a minimum-words gate.",
     "acceptance_test": "test_pipeline_rejects_empty_or_nonalpha_text",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1773,7 +1773,7 @@
     "fix": "Add a _parse_json helper returning structured {error, field} responses and validate shapes with pydantic or jsonschema.",
     "acceptance_test": "test_tools_return_structured_error_on_malformed_json",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1800,7 +1800,7 @@
     "fix": "Return lang 'unsupported' and refuse scoring; validate lang in every tool via a shared enum.",
     "acceptance_test": "test_analysis_tools_reject_unknown_lang_value",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1832,7 +1832,7 @@
     "fix": "Enforce MAX_CHARS with a clear error, chunk long texts, batch_size on encode, and test the limit.",
     "acceptance_test": "test_preprocess_rejects_text_over_max_chars_with_clear_error",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1857,9 +1857,9 @@
     "impact_on_screened_person": "Slow turnaround at scale pushes operators toward truncating text, which changes scores.",
     "fixability": "code",
     "fix": "Use nlp.pipe, cache the stemmer at module level, vectorise adjacent similarities with a row-wise dot product.",
-    "acceptance_test": "test_lexical_reuses_cached_stemmer",
+    "acceptance_test": "test_syntactic_parses_sentences_in_one_pipe_pass",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1886,7 +1886,7 @@
     "fix": "Centralise model loading in one module with a lock, preload at startup, pin model revisions, and fail with an actionable message.",
     "acceptance_test": "test_models_loaded_once_via_shared_loader",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1913,7 +1913,7 @@
     "fix": "Pin model revision, add cross-platform tolerance bounds in golden tests, and document determinism guarantees.",
     "acceptance_test": "test_semantic_scores_stable_across_repeated_runs",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1940,7 +1940,7 @@
     "fix": "Render 'not measured' for None/missing metrics and accept an injectable report date.",
     "acceptance_test": "test_report_handles_missing_metrics_without_keyerror",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1967,7 +1967,7 @@
     "fix": "Validate 3<=age<=120 and error otherwise; never silently substitute.",
     "acceptance_test": "test_predict_mental_age_rejects_invalid_age",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1989,7 +1989,7 @@
     "fix": "Add structured logging with input hash, versions, lang decision and warnings (no raw text).",
     "acceptance_test": "test_server_logs_tool_errors_and_language_coercion_without_raw_text",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2016,7 +2016,7 @@
     "fix": "Pin ruff, cache spaCy models, extend lint to scripts/, add a python-version matrix and coverage gate.",
     "acceptance_test": "test_ci_workflow_pins_tooling_and_lints_scripts",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2043,7 +2043,7 @@
     "fix": "Add a python-version matrix, run tests against the lockfile and add pytest-cov with a fail-under threshold.",
     "acceptance_test": "test_ci_workflow_has_python_matrix_and_coverage_fail_under",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": [
       "cto:X-004"
     ]
@@ -2072,7 +2072,7 @@
     "fix": "Add edge-case fixtures and a documented golden-update review process.",
     "acceptance_test": "test_golden_includes_short_mixed_and_empty_cases",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2094,7 +2094,7 @@
     "fix": "Define TypedDict/pydantic models for every tool result and enable mypy strict on tools/.",
     "acceptance_test": "test_tool_results_validate_against_result_models",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2116,7 +2116,7 @@
     "fix": "Validate norm files against a JSON schema (contiguous bands, monotonic) at load and in a test.",
     "acceptance_test": "test_norms_config_bands_are_contiguous_and_valid",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": [
       "cto:X-001"
     ]
@@ -2145,7 +2145,7 @@
     "fix": "Add a gaming/anomaly flag (rare-word ratio vs. coherence mismatch, repeated n-gram padding, word-salad detection via low semantic coherence with high lexical score) that downgrades confidence and forces a human-review label; document that the score is not tamper-resistant.",
     "acceptance_test": "test_pipeline_flags_vocabulary_stuffing_text_low_confidence",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2177,7 +2177,7 @@
     "fix": "Wrap echoed text in explicit delimiters/escape control sequences, add an untrusted-input clause to SKILL.md, detect injection-like phrases in input and flag them, and have the final report computed server-side from stored results rather than agent-retyped numbers.",
     "acceptance_test": "test_report_fences_and_flags_injection_phrases_in_evidence",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2209,7 +2209,7 @@
     "fix": "Introduce a server-side run record: tool outputs carry an HMAC/run_id and input SHA-256; downstream tools verify; report prints input hash and tool versions.",
     "acceptance_test": "test_predict_iq_rejects_unsigned_vfs_input",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2236,7 +2236,7 @@
     "fix": "Deduplicate near-identical sentences before scoring and add a repetition-ratio flag that lowers confidence.",
     "acceptance_test": "test_semantic_duplicate_sentences_do_not_inflate_coherence",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2263,7 +2263,7 @@
     "fix": "Strip control/ANSI chars and neutralise markdown (escape backticks, brackets, leading #) in _trunc; render evidence in a fenced code block.",
     "acceptance_test": "test_report_escapes_markdown_and_control_chars_in_evidence",
     "phase": 3,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2295,7 +2295,7 @@
     "impact_on_screened_person": "Evidence shown to a reviewer may quote the wrong or a truncated sentence of the person's text.",
     "fix": "Pass preprocess sentences into analyze_readability and cite their idx; drop the private split.",
     "acceptance_test": "test_readability_evidence_idx_matches_preprocess_sentences",
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2326,8 +2326,8 @@
     ],
     "impact_on_screened_person": "A degraded Indonesian lexical score is reported as if fully computed.",
     "fix": "Record a warnings list in the lexical result (vocd_failed, stemmer_unavailable) and render the true reason.",
-    "acceptance_test": "test_lexical_reports_warning_when_stemmer_unavailable",
-    "status": "open",
+    "acceptance_test": "test_lexical_reports_warning_when_vocd_fails",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2359,7 +2359,7 @@
     "impact_on_screened_person": "A tampered build could alter scores or exfiltrate submitted texts without detection.",
     "fix": "Pin actions by commit SHA, add 'permissions: contents: read', and add pip-audit and secret-scan jobs.",
     "acceptance_test": "test_ci_workflow_pins_actions_by_sha_and_runs_pip_audit",
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -2420,7 +2420,7 @@
     "impact_on_screened_person": "Reviewers see an unrepresentative slice of the person's writing as justification.",
     "fix": "Rank evidence by metric contribution and include both strongest and weakest examples.",
     "acceptance_test": "test_evidence_ranked_by_contribution_not_position",
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
