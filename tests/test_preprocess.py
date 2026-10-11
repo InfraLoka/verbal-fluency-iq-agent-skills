@@ -1,3 +1,4 @@
+# Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
 import sys
 
 sys.path.insert(0, "mcp-server")

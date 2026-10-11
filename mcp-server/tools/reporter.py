@@ -1,3 +1,4 @@
+# Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
 from datetime import date
 from typing import Optional
 
@@ -146,7 +147,10 @@ def generate_report(
     line(f"  Mean sentence length  : {syntactic_result['mean_sentence_length']} words")
     line(f"  Clause density        : {syntactic_result['clause_density']}")
     line(f"  Subordination index   : {syntactic_result['subordination_index']}")
-    line(f"  Dependency tree depth : {syntactic_result['dependency_depth']}")
+    _dep_depth = syntactic_result["dependency_depth"]
+    line(
+        f"  Dependency tree depth : {_dep_depth if _dep_depth is not None else 'N/A (no parser for id)'}"
+    )
     line(f"  Passive voice ratio   : {syntactic_result['passive_ratio']}")
     line()
 
@@ -251,6 +255,12 @@ def generate_report(
     line("    • Education estimate does not account for self-taught learning")
     line("    • Cultural/linguistic background affects psycholinguistic norms")
     line("    • Short texts (< 100 words) significantly reduce reliability")
+    if lang_result["lang"] == "id":
+        line("    • Indonesian syntactic depth not measured (no dependency parser);")
+        line("      syntactic score derived from clause density, subordination, and")
+        line("      passive morphology only")
+        line("    • IQ/VFS norms are English-derived and only approximately adapted to")
+        line("      Indonesian")
 
     if verbose_caveats or format_flag == "--verbose-caveats":
         line()

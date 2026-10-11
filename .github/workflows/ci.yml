@@ -78,8 +78,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
 
-      - name: Download spaCy model
-        run: python -m spacy download en_core_web_sm
+      - name: Download spaCy models
+        run: |
+          python -m spacy download en_core_web_sm
+          python -m spacy download xx_ent_wiki_sm
 
       - name: Run tests
         run: pytest tests/ -v
+
+      - name: AEGIS findings integrity
+        run: python scripts/audit_status.py

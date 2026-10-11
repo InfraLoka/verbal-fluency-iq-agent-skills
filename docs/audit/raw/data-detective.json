@@ -1,0 +1,430 @@
+[
+  {
+    "id": "X-001",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P0",
+    "title": "95% CI is invented from word count, not from measurement error",
+    "claim": "ci_half = round(15 - confidence*10) is a linear function of a word-count tier. It is not derived from a standard error, test-retest reliability, or any validation against criterion IQ, yet it is printed as a '95% CI' of +/-5 to +/-12 IQ points. A text-to-IQ proxy with realistic validity (r~0.3-0.5) has a prediction interval of +/-25 points or more. README admits the CI is not validated, but the report and --scores-only output present it as a statistical interval.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 80,
+        "excerpt": "    ci_half = round(15 - confidence * 10)"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 107,
+        "excerpt": "line(f\"  95% CI range    : {iq_result['ci_low']} – {iq_result['ci_high']}\")"
+      },
+      {
+        "file": "README.md",
+        "line": 894,
+        "excerpt": "**Error margins are real.** The 95% CI is mathematically derived from the confidence tier, not from validation against a reference population."
+      }
+    ],
+    "impact_on_screened_person": "A screened candidate is shown a narrow-looking interval (e.g. 103-115) that implies far more certainty than exists; a reviewer can treat a 109 vs 124 difference as meaningful and reject on it.",
+    "fixability": "guardrail",
+    "fix": "Stop labelling the value a 95% CI. Until a validation study supplies an SEE, either withhold the interval or report a wide, explicitly 'uncalibrated heuristic range' (>= +/-25) and refuse IQ output for screening use.",
+    "acceptance_test": "test_predict_iq_interval_not_labelled_95ci_without_validation",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-002",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P0",
+    "title": "No criterion validation: all norms, bands and weights are unsourced hand-set constants",
+    "claim": "iq_norms.json and edu_norms.json have no provenance (no sample, N, citation, date, or population), and the VFS formula weights (0.35/0.25/0.25/0.15, and every sub-weight/min-max range) are hand-set. No test or doc compares output to any measured IQ or education. The golden test only snapshots the tool's own previous output, so it detects drift, not validity. The README nonetheless states verbal fluency 'correlates with cognitive ability' and outputs IQ, percentile and education.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 37,
+        "excerpt": "        lexical[\"score\"] * 0.35"
+      },
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 0,
+        "excerpt": "(absence) no source, sample, N, or citation field anywhere in iq_norms.json; only vfs_min/vfs_max/iq_min/iq_max/label/percentile_min"
+      },
+      {
+        "file": "tests/test_golden.py",
+        "line": 36,
+        "excerpt": "    assert abs(actual[\"iq\"] - expected[\"iq\"]) <= 1"
+      }
+    ],
+    "impact_on_screened_person": "People are labelled 'Below Average' or 'Low' (IQ 55-89) and assigned an education level by constants nobody can defend, with no accountable basis for appeal.",
+    "fixability": "process",
+    "fix": "Write a validation-study protocol (criterion measure, sample, N, subgroup analysis, pre-registered metrics); until results exist, mark IQ/percentile/education outputs 'experimental, unvalidated' and block hiring/admissions use.",
+    "acceptance_test": "doc: docs/validation/validation-protocol.md exists and names criterion measure, sample size, subgroup analyses and acceptance r/SEE thresholds",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-003",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P1",
+    "title": "Percentile is mathematically wrong: 'Average' IQ 109 reported as the 95th percentile",
+    "claim": "percentile = band.percentile_min + position*(95 - band.percentile_min) interpolates every band toward 95, so the top of each band maps to 95 regardless of IQ. Verified: predict_iq(69.99, 0.7) gives IQ 109 (Average) with percentile 95; vfs 84.99 gives IQ 124 with percentile 95; vfs 100 gives IQ 145 with percentile 95 (true ~99.9). Percentile is also not derivable from IQ via the normal CDF (IQ 109 ~73rd). The classification, IQ and percentile fields contradict each other.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 81,
+        "excerpt": "    percentile = round("
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 82,
+        "excerpt": "        band[\"percentile_min\"] + position * (95 - band[\"percentile_min\"])"
+      }
+    ],
+    "impact_on_screened_person": "Reports shown to hiring/admissions staff carry internally inconsistent figures (average IQ at 95th percentile) that either inflate or mislead; undermines any decision based on them.",
+    "fixability": "code",
+    "fix": "Compute percentile from the IQ point with the normal CDF (mean 100, SD 15) and drop the per-band interpolation; cap/mark extremes.",
+    "acceptance_test": "test_predict_iq_percentile_consistent_with_normal_cdf",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-004",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P1",
+    "title": "Verbal-style proxy is presented as IQ, ignoring education, register, genre and L1 confounds (ecological/construct fallacy)",
+    "claim": "The pipeline infers a person's IQ from group-level correlations between text complexity and cognition. Sentence length, rare words, subordination and readability indices are dominated by education, genre (chat vs essay), editing, topic and first language. README advertises use on 'chat logs, transcripts' and social posts with no genre control; mental age and education are derived from the same signal, so they are not independent. No covariate adjustment is applied.",
+    "evidence": [
+      {
+        "file": "README.md",
+        "line": 3,
+        "excerpt": "Predict IQ, mental age, and education level from text passages using verbal fluency as a psycholinguistic proxy. Supports **English** and **Indonesian**. Works on any text type: essays, social media posts, chat logs, transcripts."
+      },
+      {
+        "file": "README.md",
+        "line": 29,
+        "excerpt": "Verbal fluency — the richness, complexity, and coherence of written language — correlates with cognitive ability measures."
+      }
+    ],
+    "impact_on_screened_person": "Second-language writers, people with less formal schooling, or someone who wrote casual chat text are scored as lower-intelligence; the tool encodes class and language background as 'IQ'.",
+    "fixability": "guardrail",
+    "fix": "Refuse or heavily degrade IQ output unless text type is declared as formal prose of a minimum length; report 'writing-style complexity' instead of IQ; add genre/L1 warnings and a no-individual-decision notice.",
+    "acceptance_test": "test_pipeline_refuses_iq_for_informal_or_unknown_genre",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-005",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P1",
+    "title": "Short-text scores are still emitted as a point IQ with a narrow-looking CI",
+    "claim": "Confidence is a pure word-count lookup (<30 words = 0.30, VERY LOW), but predict_iq still returns a point estimate and a +/-12 CI for 10-30 word inputs. MATTR falls back to plain TTR below 50 tokens and hapax_ratio (weighted 0.30 of lexical) is strongly length-dependent: a 12-token sentence gives hapax_ratio 0.90, i.e. a very high lexical score. vocd is skipped under 50 tokens. Small-sample metrics are length-biased and extremely noisy.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 45,
+        "excerpt": "        confidence, label = 0.30, \"VERY LOW\""
+      },
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 10,
+        "excerpt": "        return len(set(tokens)) / len(tokens) if tokens else 0.0"
+      },
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 48,
+        "excerpt": "    hapax_ratio = round(hapax_count / len(freq), 3) if freq else 0.0"
+      }
+    ],
+    "impact_on_screened_person": "A candidate who submits a short statement gets a numeric IQ that is mostly a length artefact; a short text can score higher on lexical diversity than a long, rich one.",
+    "fixability": "guardrail",
+    "fix": "Refuse to output IQ/percentile/education below a minimum word count (e.g. 250) and degrade to 'insufficient text'; use length-robust metrics (MTLD/HD-D) and drop raw hapax ratio.",
+    "acceptance_test": "test_predict_iq_refused_below_min_word_count",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-006",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P1",
+    "title": "Indonesian passive detection is a prefix regex with a hand-written denylist; non-passives counted as passive",
+    "claim": "_ID_PASSIVE_RE matches any di-/ter- word of 4+ letters. Verified: 'terjadi', 'terkait', 'terbaik', 'dimana', 'diantara' are counted as passive (passive_ratio 1.0 for 'Hal itu terjadi dan terkait dengan hasil terbaik dimana kami berada diantara mereka'). The denylist is a finite hand-curated list that cannot enumerate Indonesian morphology. The metric feeds the evidence and report, with no measured precision.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 65,
+        "excerpt": "_ID_PASSIVE_RE = re.compile(r\"^(di|ter)[a-z]{4,}$\")"
+      },
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 67,
+        "excerpt": "ID_PASSIVE_EXCLUSIONS = frozenset("
+      }
+    ],
+    "impact_on_screened_person": "Indonesian writers get structurally different, partly spurious syntactic features than English writers, so cross-language scores are not comparable.",
+    "fixability": "code",
+    "fix": "Replace denylist with an allowlist/verb lexicon or morphological analyser (e.g. di- + known verb stem via Sastrawi); measure precision on a labelled sample.",
+    "acceptance_test": "test_id_passive_not_triggered_by_terjadi_terkait_terbaik_dimana_diantara",
+    "phase": 3,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-007",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P1",
+    "title": "Indonesian clause_density counts dan/atau/serta and prepositional 'sejak/selama/sampai/sebelum/setelah/hingga' as clauses",
+    "claim": "clause_counts = 1 + subs + coords, where coords includes 'dan','atau','serta' (also NP/word-level coordinators) and subs includes prepositions like sejak/selama/sampai/sebelum/setelah/hingga. Verified: 'Saya makan nasi dan atau minum teh sejak pagi sampai malam selama seminggu' (one clause) yields clause_density 6.0 and subordination_index 3.0, scoring 74.2. clause_density is 35% of syntactic score (and feeds education), so one frequent coordinator inflates the score and stacking prepositions rewards padding.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 49,
+        "excerpt": "ID_CLAUSE_COORDINATORS = {"
+      },
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 133,
+        "excerpt": "        clause_counts.append(1 + subs + coords)"
+      },
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 171,
+        "excerpt": "        msl_score * (0.30 / 0.90) + cd_score * (0.35 / 0.90) + si_score * (0.25 / 0.90),"
+      }
+    ],
+    "impact_on_screened_person": "Indonesian texts are scored higher or lower on syntax for lexical-list reasons, not structure; the same ability yields different scores in English vs Indonesian.",
+    "fixability": "code",
+    "fix": "Count clause joiners only where they link verbal clauses (require a verb/predicate on both sides) and split the prepositional senses out of ID_SUBORDINATORS.",
+    "acceptance_test": "test_id_clause_density_ignores_nominal_coordination_and_temporal_prepositions",
+    "phase": 3,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-008",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P1",
+    "title": "Semantic entity score uses English NER labels but Indonesian model emits PER/ORG/LOC/MISC; 'person' scores lowest",
+    "claim": "ABSTRACT_TYPES/CONCRETE_TYPES are English OntoNotes labels (LAW, NORP, PERSON, GPE...). xx_ent_wiki_sm only emits LOC, MISC, ORG, PER (verified via ner.labels). For Indonesian text, mentioning an ORG gives ABSTRACT (80), LOC gives CONCRETE (50), and PER/MISC or nothing gives MINIMAL (20). Mentioning a company is treated as more 'sophisticated' than mentioning a person, in both languages; named-entity presence is not a measure of intellect.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/semantic.py",
+        "line": 13,
+        "excerpt": "ABSTRACT_TYPES = {\"LAW\", \"ORG\", \"NORP\", \"EVENT\", \"WORK_OF_ART\", \"LANGUAGE\"}"
+      },
+      {
+        "file": "mcp-server/tools/semantic.py",
+        "line": 14,
+        "excerpt": "CONCRETE_TYPES = {\"PERSON\", \"GPE\", \"LOC\", \"FAC\", \"PRODUCT\"}"
+      },
+      {
+        "file": "mcp-server/tools/semantic.py",
+        "line": 125,
+        "excerpt": "    entity_score = {\"ABSTRACT\": 80.0, \"CONCRETE\": 50.0, \"MINIMAL\": 20.0}["
+      }
+    ],
+    "impact_on_screened_person": "Topic choice (talking about people vs organisations) moves a person's score by up to 6 points of semantic score, penalising subjects who write about individuals.",
+    "fixability": "code",
+    "fix": "Remove entity_sophistication from the score (or ground it in a validated measure); at minimum map labels per model and do not weight it.",
+    "acceptance_test": "test_semantic_entity_score_independent_of_ner_label_set",
+    "phase": 3,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-009",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P1",
+    "title": "Education level assigned by US grade-level readability formulas applied to Indonesian text with English syllable counts",
+    "claim": "readability.py always calls textstat.set_lang('en_US') and computes Gunning Fog, ARI and Coleman-Liau with English syllable/letter rules even for lang == 'id'; only Flesch is customised, using English coefficients (206.835/1.015/84.6). edu_norms.json then maps these US-grade-calibrated values straight to Indonesian levels (SMP/SMA/S1/S2/S3). The thresholds are uncalibrated for Indonesian orthography and there is no Indonesian schooling norm.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/readability.py",
+        "line": 23,
+        "excerpt": "    textstat.set_lang(\"en_US\")"
+      },
+      {
+        "file": "mcp-server/tools/readability.py",
+        "line": 58,
+        "excerpt": "    fog = round(textstat.gunning_fog(text), 1)"
+      },
+      {
+        "file": "mcp-server/config/edu_norms.json",
+        "line": 4,
+        "excerpt": "\"fog_min\": 17, \"ari_min\": 16, \"lexical_density_min\": 0.60,"
+      }
+    ],
+    "impact_on_screened_person": "An Indonesian applicant can be graded as SD/SMP vs S2 by an English formula's artefacts (verified: a simple 3-sentence Indonesian text yields Fog 4.8), with consequences for admissions placement.",
+    "fixability": "guardrail",
+    "fix": "Do not emit an education level for lang == 'id' until Indonesian-calibrated readability and norms exist; return 'not available' with reason.",
+    "acceptance_test": "test_estimate_education_unavailable_for_indonesian_without_calibrated_norms",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-010",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P1",
+    "title": "Education matching uses a brittle AND of three uncalibrated cutoffs with a meaningless confidence",
+    "claim": "A level is matched only when fog, ari AND lexical_density all clear the thresholds, so one low metric drops the person to a lower level (verified: fog=20, ari=2, density 0.7 -> 'Primary School' with confidence 0.82 HIGH). The 'confidence' counts margins above the matched level's own thresholds (+1,+1,+0.05), so the floor level SD has all-zero minima and always scores HIGH. clause_density is a parameter but is never used.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 118,
+        "excerpt": "        if ("
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 134,
+        "excerpt": "    if thresholds_met == 3:"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 113,
+        "excerpt": "    gunning_fog: float, ari: float, lexical_density: float, clause_density: float"
+      }
+    ],
+    "impact_on_screened_person": "A single noisy index (e.g. ARI on short sentences) can drop an applicant several education levels while the output claims HIGH confidence.",
+    "fixability": "code",
+    "fix": "Use a continuous composite or modal score with an uncertainty range, drop the margin-based confidence, and remove or use clause_density.",
+    "acceptance_test": "test_estimate_education_does_not_report_high_confidence_for_conflicting_metrics",
+    "phase": 3,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-011",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P1",
+    "title": "'lexical_density' is a word-length proxy (len>3), then double-counted in lexical score and education",
+    "claim": "lexical_density is defined as the share of tokens longer than 3 characters, not content-word ratio. It correlates with avg_word_length (also scored, 0.15) so word length is counted twice in the lexical score, and the same value is an education gate in edu_norms.json. Verified: 'the cat sat on the mat and the dog ran to the park' gives density 0.077. Indonesian function words (yang, dari, untuk, dengan, adalah) are >3 letters and count as 'content'.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 52,
+        "excerpt": "    content_words = [t for t in alpha if len(t) > 3]"
+      },
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 53,
+        "excerpt": "    lexical_density = round(len(content_words) / len(alpha), 3)"
+      },
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 61,
+        "excerpt": "        mattr_score * 0.40 + hapax_score * 0.30 + awl_score * 0.15 + ld_score * 0.15, 1"
+      }
+    ],
+    "impact_on_screened_person": "Indonesian text (long function words, agglutinative morphology) scores systematically higher/lower on a length artefact, shifting both IQ and education.",
+    "fixability": "code",
+    "fix": "Compute content-word ratio via POS tags or stop-word lists per language; remove one of the collinear length metrics.",
+    "acceptance_test": "test_lexical_density_uses_content_words_not_length_threshold",
+    "phase": 3,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-012",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P2",
+    "title": "Semantic score substitutes a neutral 50.0 for missing data and silently feeds it into VFS",
+    "claim": "When a text has <2 sentences (or no within-document transitions) analyze_semantic returns score 50.0 with coherence None, and compute_verbal_fluency_score still weights it at 0.25. Missing data is imputed as an average ability, pulling short or single-sentence submissions toward the middle (regression to the mean made to look like a measurement). The syntactic ID path does the honest thing (drops and renormalises); semantic does not.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/semantic.py",
+        "line": 46,
+        "excerpt": "    if len(sentences) < 2:"
+      },
+      {
+        "file": "mcp-server/tools/semantic.py",
+        "line": 52,
+        "excerpt": "\"score\": 50.0,"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 39,
+        "excerpt": "        + semantic[\"score\"] * 0.25"
+      }
+    ],
+    "impact_on_screened_person": "A candidate with a single long paragraph (one sentence per tokenizer) receives a mid-range semantic score regardless of real coherence, biasing the final IQ towards 'Average'.",
+    "fixability": "code",
+    "fix": "Return score None and renormalise the weights in compute_verbal_fluency_score when a component is unavailable; surface it in the report.",
+    "acceptance_test": "test_compute_vfs_renormalises_weights_when_semantic_unavailable",
+    "phase": 3,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-013",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P2",
+    "title": "Band table has gaps and unscored fall-through to 'Low'; bands truncate IQ to 55-145",
+    "claim": "Bands end at x.99 and the next starts at x.00 (e.g. 84.99/85); predict_iq accepts any float, and a value in the gap (84.995) falls through to the last band, returning 'Low' IQ 55-74 for a near-top score (verified). Output IQ is also confined to 55-145 and the within-band linear map makes each band's ceiling a hard step. Range restriction (no IQ <55 or >145) and the discontinuous mapping are unacknowledged.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 70,
+        "excerpt": "    band = norms[\"bands\"][-1]"
+      },
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 0,
+        "excerpt": "(absence) no continuous mapping; bands defined as vfs_max 84.99 followed by vfs_min 85"
+      },
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 5,
+        "excerpt": "\"iq_min\": 125, \"iq_max\": 145,"
+      }
+    ],
+    "impact_on_screened_person": "Edge-case scores can be misclassified by 50+ IQ points, and the apparent hard ceiling misreports extreme performers.",
+    "fixability": "code",
+    "fix": "Use half-open intervals [min,max) covering the real line, clamp explicitly with a warning, and validate the table for gaps/overlap at load time.",
+    "acceptance_test": "test_predict_iq_no_gap_between_bands_for_fractional_vfs",
+    "phase": 3,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-014",
+    "category": "fallacy",
+    "persona": "data-detective",
+    "severity": "P2",
+    "title": "Mental age = IQ/100 x chronological age is an obsolete ratio formula, extended to adults with an assumed age",
+    "claim": "predict_mental_age applies the ratio-IQ mental age model to any chronological age and defaults to 30 when age is unknown. The ratio model is invalid beyond adolescence (verified: IQ 120 at age 70 gives mental age 84; IQ 100 at 8 gives 8). It is also dependent on the unvalidated IQ point, so any error is multiplied by age. The reported figure is not a psychometric quantity.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 105,
+        "excerpt": "        \"mental_age\": round((iq_estimate / 100) * age, 1),"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 102,
+        "excerpt": "        else norms[\"default_chronological_age\"]"
+      }
+    ],
+    "impact_on_screened_person": "A mature applicant with a mid-range score is told their 'mental age' is e.g. 84 or 27, which reads as a cognitive deficit and is meaningless.",
+    "fixability": "guardrail",
+    "fix": "Drop mental age for age > 16 and when age is assumed; otherwise withhold the number and explain why.",
+    "acceptance_test": "test_predict_mental_age_not_reported_for_adults_or_assumed_age",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  }
+]

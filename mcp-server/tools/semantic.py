@@ -1,5 +1,5 @@
+# Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
 from collections import defaultdict
-from typing import List
 
 import numpy as np
 import spacy
@@ -29,7 +29,19 @@ def _get_nlp(lang: str):
     return _nlp_cache[lang]
 
 
-def analyze_semantic(text: str, sentences: List[dict], lang: str) -> dict:
+def analyze_semantic(
+    text: str,
+    sentences: list[dict],
+    lang: str,
+    segment_boundaries: list[int] | None = None,
+) -> dict:
+    """Semantic coherence analysis.
+
+    segment_boundaries: optional list of sentence ``idx`` values at which a NEW
+    document begins. Adjacent-sentence coherence pairs whose target sentence starts
+    a new document are skipped, so multi-file subjects are not penalised for spurious
+    drift at document seams. Default None ⇒ all adjacent pairs are scored.
+    """
     if len(sentences) < 2:
         return {
             "argument_coherence": None,
@@ -41,6 +53,8 @@ def analyze_semantic(text: str, sentences: List[dict], lang: str) -> dict:
             "note": "Too few sentences for full semantic analysis",
         }
 
+    boundaries = set(segment_boundaries or [])
+
     model = _get_model()
     texts = [s["text"] for s in sentences]
     embeddings = model.encode(texts)
@@ -48,6 +62,9 @@ def analyze_semantic(text: str, sentences: List[dict], lang: str) -> dict:
     evidence = []
     coherence_vals = []
     for i in range(len(embeddings) - 1):
+        # Skip transitions that straddle a document boundary.
+        if sentences[i + 1]["idx"] in boundaries:
+            continue
         sim = float(cosine_similarity([embeddings[i]], [embeddings[i + 1]])[0][0])
         coherence_vals.append(sim)
         note = (
@@ -65,6 +82,19 @@ def analyze_semantic(text: str, sentences: List[dict], lang: str) -> dict:
                 "note": note,
             }
         )
+
+    if not coherence_vals:
+        # Every adjacent pair straddled a document boundary (e.g. each sentence is
+        # its own segment) — not enough within-document transitions to assess.
+        return {
+            "argument_coherence": None,
+            "topic_drift_index": None,
+            "lexical_chain_density": 0.0,
+            "entity_sophistication": "MINIMAL",
+            "score": 50.0,
+            "evidence": [],
+            "note": "No within-document transitions available for semantic analysis",
+        }
 
     argument_coherence = round(float(np.mean(coherence_vals)), 3)
     topic_drift_index = round(float(np.std(coherence_vals)), 3)

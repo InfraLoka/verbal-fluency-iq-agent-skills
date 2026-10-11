@@ -1,0 +1,35 @@
+{
+  "example/aqilah/source/1.md": {
+    "lang": "id",
+    "vfs": 50.4,
+    "iq": 85,
+    "ci": [
+      79,
+      91
+    ],
+    "edu": "D3",
+    "word_count": 2837
+  },
+  "example/bimo/source/1.md": {
+    "lang": "id",
+    "vfs": 57.8,
+    "iq": 94,
+    "ci": [
+      87,
+      101
+    ],
+    "edu": "S1",
+    "word_count": 436
+  },
+  "example/fabhian/source/1.md": {
+    "lang": "id",
+    "vfs": 52.3,
+    "iq": 86,
+    "ci": [
+      79,
+      93
+    ],
+    "edu": "S1",
+    "word_count": 340
+  }
+}

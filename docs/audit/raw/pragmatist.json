@@ -1,0 +1,411 @@
+[
+  {
+    "id": "X-001",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P0",
+    "title": "One English-derived VFS-to-IQ table is applied to both languages; lang is ignored in scoring",
+    "claim": "compute_verbal_fluency_score receives lang but only echoes it; iq_norms.json has no per-language bands. Verified on parallel en/id translations of the same paragraph: English VFS 47.5 -> IQ 82 / D3, Indonesian VFS 61.8 -> IQ 99 / S1 (a ~17 point gap for identical content). Cross-language scores are not comparable, so mixed en/id applicant pools get systematically different outcomes.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 34,
+        "excerpt": "    lang: str,"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 62,
+        "excerpt": "        \"lang\": lang,"
+      },
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 4,
+        "excerpt": "      \"vfs_min\": 85, \"vfs_max\": 100,"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 262,
+        "excerpt": "        line(\"    • IQ/VFS norms are English-derived and only approximately adapted to\")"
+      }
+    ],
+    "impact_on_screened_person": "Applicants writing in Indonesian are scored on a different effective scale than English writers and can be ranked above or below peers purely because of language, with no disclosure in --json/--scores-only output.",
+    "fixability": "guardrail",
+    "fix": "Refuse or loudly flag any cross-language comparison; add per-language norm tables with documented calibration data, and until validated emit a language_norm_unvalidated flag in every output and block rank-ordering across languages.",
+    "acceptance_test": "test_scores_flag_cross_language_norms_unvalidated_and_block_cross_language_ranking",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-002",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P0",
+    "title": "Unsupported languages and code-switched text silently analysed as English",
+    "claim": "detect_language forces any non-en/id result (Javanese, Sundanese, Malay-mixed, etc.) to en at 0.50 confidence, and the pipeline never gates on that confidence. Verified: a Javanese paragraph returns lang=en conf=0.5; an en/id code-switched sentence returns en. Javanese-influenced or code-switching writers are scored with English tokenisation, readability and norms.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/preprocess.py",
+        "line": 61,
+        "excerpt": "    if lang not in (\"en\", \"id\"):"
+      },
+      {
+        "file": "mcp-server/tools/preprocess.py",
+        "line": 62,
+        "excerpt": "        lang = \"en\""
+      },
+      {
+        "file": "mcp-server/tools/preprocess.py",
+        "line": 63,
+        "excerpt": "        confidence = 0.50"
+      },
+      {
+        "file": "scripts/pipeline.py",
+        "line": 22,
+        "excerpt": "    lang = detect_language(text)[\"lang\"]"
+      }
+    ],
+    "impact_on_screened_person": "A candidate who writes in regional language, or mixes languages naturally, receives an IQ/education estimate that is meaningless but presented as normal output.",
+    "fixability": "guardrail",
+    "fix": "Return an explicit unsupported_language / mixed_language status with no IQ, mental age or education output when detection confidence is below a threshold or the language is not en/id; add segment-level language ID for code-switching.",
+    "acceptance_test": "test_pipeline_refuses_scoring_for_unsupported_or_low_confidence_language",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-003",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P0",
+    "title": "Consequential-use warning is opt-in text; machine outputs carry no caveats or human-review requirement",
+    "claim": "The 'do not use for hiring' warning appears only when --verbose-caveats is passed, and --scores-only/--json return bare numbers (iq, education code, mental age) with no limitations, no age_assumed flag, no CI semantics and no human-review marker. README states the tool must not be used for hiring while the product is meant to screen people, so downstream consumers (and agents) see single numbers that invite automation bias.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 46,
+        "excerpt": "    if format_flag == \"--scores-only\":"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 265,
+        "excerpt": "    if verbose_caveats or format_flag == \"--verbose-caveats\":"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 277,
+        "excerpt": "            \"    • Do not use these estimates for hiring, clinical, or legal decisions.\""
+      },
+      {
+        "file": "README.md",
+        "line": 902,
+        "excerpt": "**Do not use for consequential decisions.** These estimates must not be used for hiring, clinical assessment, academic evaluation, or legal proceedings."
+      }
+    ],
+    "impact_on_screened_person": "A screened person can be rejected on a bare integer that a hiring system treats as a verdict, with no record that a human must review it and no notice of the tool's known limits.",
+    "fixability": "guardrail",
+    "fix": "Include a mandatory non_decisional/requires_human_review block and limitations list in every output format (including --scores-only/--json); make the extended caveat the default; add a decision-use policy gate that refuses threshold or pass/fail output.",
+    "acceptance_test": "test_all_output_formats_include_human_review_flag_and_limitations",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-004",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P1",
+    "title": "Percentile is computed from position inside a band and is nonsensical (IQ 74 reported as 95th percentile)",
+    "claim": "predict_iq interpolates percentile between band percentile_min and a hard-coded 95 inside every band. Verified: vfs 39.99 -> IQ 74 -> percentile 95; vfs 54.99 -> IQ 89 -> 95; vfs 55 -> IQ 90 -> 25. Percentile is non-monotonic and jumps 95 -> 25 across a 0.01 VFS change, and the same cliff makes classification flip at every band edge.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 81,
+        "excerpt": "    percentile = round("
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 82,
+        "excerpt": "        band[\"percentile_min\"] + position * (95 - band[\"percentile_min\"])"
+      },
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 13,
+        "excerpt": "      \"percentile_min\": 75"
+      }
+    ],
+    "impact_on_screened_person": "People near a band edge are told they are at the 95th percentile or the 25th based on a rounding artefact, and low scorers can be shown inflated percentiles that misstate relative standing either way.",
+    "fixability": "code",
+    "fix": "Derive percentile from the IQ point estimate via the normal CDF (mean 100, sd 15) and make point/classification continuous or explicitly show the band edge uncertainty.",
+    "acceptance_test": "test_predict_iq_percentile_monotonic_in_vfs_and_matches_normal_cdf",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-005",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P1",
+    "title": "The reported 95% CI is a heuristic of word count only and is narrower than the tool's own stated error",
+    "claim": "ci_half = round(15 - confidence*10) depends solely on text length: 12 points at <30 words, 6 at >=300 words. It is labelled '95% CI' but has no statistical derivation, ignores norm/language/register uncertainty, and contradicts the report's own limitation of +-10-15 points. Verified IQ 84 +-6 for a high-confidence text.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 80,
+        "excerpt": "    ci_half = round(15 - confidence * 10)"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 44,
+        "excerpt": "    if word_count < 30:"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 107,
+        "excerpt": "    line(f\"  95% CI range    : {iq_result['ci_low']} – {iq_result['ci_high']}\")"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 253,
+        "excerpt": "    line(\"    • Text-based IQ estimation carries ±10–15 pt error margin\")"
+      }
+    ],
+    "impact_on_screened_person": "A narrow interval makes a weak estimate look precise, pushing decision makers to treat IQ 90 vs 100 differences as real when the true uncertainty spans the whole average band.",
+    "fixability": "code",
+    "fix": "Replace with an interval derived from a validation study (or at minimum +-15 floor and rename 'heuristic range'); never narrower than the documented error; include language and register in confidence.",
+    "acceptance_test": "test_iq_interval_never_narrower_than_documented_error_margin",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-006",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P1",
+    "title": "Indonesian lexical density and word length favour long agglutinative words; grade-level indices are English-calibrated",
+    "claim": "content_words are simply tokens longer than 3 characters (no POS), and avg_word_length and ld_score reward length; Indonesian affixation lengthens ordinary words. Readability runs textstat.gunning_fog/ARI/Coleman-Liau under en_US for Indonesian (only Flesch has an id syllable path), and those English grade values are thresholded directly into S1/S2/SMA. The education label for Indonesian writers is therefore an artefact of word length.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 52,
+        "excerpt": "    content_words = [t for t in alpha if len(t) > 3]"
+      },
+      {
+        "file": "mcp-server/tools/readability.py",
+        "line": 23,
+        "excerpt": "    textstat.set_lang(\"en_US\")"
+      },
+      {
+        "file": "mcp-server/tools/readability.py",
+        "line": 58,
+        "excerpt": "    fog = round(textstat.gunning_fog(text), 1)"
+      },
+      {
+        "file": "mcp-server/config/edu_norms.json",
+        "line": 4,
+        "excerpt": "      \"fog_min\": 17, \"ari_min\": 16, \"lexical_density_min\": 0.60,"
+      }
+    ],
+    "impact_on_screened_person": "Indonesian writers are assigned education levels (e.g. S1/S2 vs D3 for the same content in English) on an English school-grade scale, misclassifying qualifications in admissions or hiring.",
+    "fixability": "code",
+    "fix": "Use POS-based content-word counts per language, language-specific readability formulas and separately calibrated Indonesian education thresholds; flag education as unvalidated for id until calibrated.",
+    "acceptance_test": "test_education_level_parallel_en_id_texts_within_one_level",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-007",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P1",
+    "title": "Indonesian clause density counts noun coordination and prepositional time words as clauses",
+    "claim": "ID_CLAUSE_COORDINATORS includes dan/atau/serta and ID_SUBORDINATORS includes sejak/selama/sampai/sebelum/setelah/hingga, which are prepositions as often as conjunctions; clause_counts = 1 + subs + coords. Verified: 'Ayah dan ibu membeli sayur dan buah.' scores clause_density 3.0; 'Dia tinggal di sana sejak pagi sampai malam selama liburan.' scores 4.0 with subordination 3.0. clause_density is 35% of the id syntactic score (the education mapper accepts clause_density but never uses it, so the seed's education claim does not hold).",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 49,
+        "excerpt": "ID_CLAUSE_COORDINATORS = {"
+      },
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 50,
+        "excerpt": "    \"dan\","
+      },
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 133,
+        "excerpt": "        clause_counts.append(1 + subs + coords)"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 113,
+        "excerpt": "    gunning_fog: float, ari: float, lexical_density: float, clause_density: float"
+      }
+    ],
+    "impact_on_screened_person": "Writers who list items or use temporal prepositions get a higher syntactic (hence IQ) score than writers of structurally equal sentences, an arbitrary advantage tied to lexical habit.",
+    "fixability": "code",
+    "fix": "Count dan/atau/serta as clause joiners only when followed by a finite predicate (verb), treat sejak/sampai/selama/hingga as subordinators only before a clause, and add regression tests with noun-coordination sentences.",
+    "acceptance_test": "test_id_clause_density_ignores_noun_coordination_and_prepositional_time_words",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-008",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P1",
+    "title": "Indonesian syntactic lexicon is formal-register only; colloquial and dialect writing is penalised",
+    "claim": "ID_SUBORDINATORS/ID_CLAUSE_COORDINATORS contain only standard-register conjunctions. Colloquial and Javanese-influenced forms (kalo, biar, soalnya, makanya, pas, gara-gara, nek, ben) are absent, so informal but fully complex sentences receive lower subordination and clause density; the passive detector also only knows di-/ter- morphology.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 13,
+        "excerpt": "ID_SUBORDINATORS = {"
+      },
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 22,
+        "excerpt": "    \"agar\","
+      },
+      {
+        "file": "mcp-server/tools/syntactic.py",
+        "line": 65,
+        "excerpt": "_ID_PASSIVE_RE = re.compile(r\"^(di|ter)[a-z]{4,}$\")"
+      }
+    ],
+    "impact_on_screened_person": "Candidates who write in everyday or regionally-influenced Indonesian are scored lower than those using formal register, a proxy for region and class rather than ability.",
+    "fixability": "code",
+    "fix": "Normalise colloquial/dialect variants to standard forms (or extend the lexicon with register-tagged entries) before counting, and add register-parity tests; report detected register as a limiting factor.",
+    "acceptance_test": "test_id_syntactic_score_equal_for_formal_and_colloquial_paraphrase",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-009",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P1",
+    "title": "Ratio mental age is applied to adults, uses an assumed age of 30, and is shown without caution",
+    "claim": "mental_age = iq/100 * chronological_age is only defined for children; for adults it yields values like 84 years (IQ 120, age 70) or 9.5 years at IQ 95 age 10. When age is omitted the default 30 is silently used (flag shown only in the long report), so the figure is arbitrary and age-dependent.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 105,
+        "excerpt": "        \"mental_age\": round((iq_estimate / 100) * age, 1),"
+      },
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 34,
+        "excerpt": "  \"default_chronological_age\": 30"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 51,
+        "excerpt": "            \"mental_age\": mental_age_result[\"mental_age\"],"
+      }
+    ],
+    "impact_on_screened_person": "A screened adult can be told they have a 'mental age' of a child or of 84 years, a stigmatising and invalid figure that also varies with the applicant's age rather than ability.",
+    "fixability": "guardrail",
+    "fix": "Suppress mental age for age >= 16 or unknown age and return null with a reason; remove it from --scores-only; keep only for explicitly child assessments with a validated norm.",
+    "acceptance_test": "test_mental_age_null_for_adult_or_unknown_age",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-010",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P2",
+    "title": "Misspellings and orthographic variation are scored as lexical sophistication",
+    "claim": "MATTR, hapax ratio and evidence 'rare words' count every distinct token with no spelling normalisation; a paragraph with deliberate typos scored higher than the clean version (VFS 48.4 vs 47.5). Spelling errors from dyslexia, non-native writing or keyboard noise therefore raise diversity metrics, and there is no accommodation mode or disability disclosure path.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 47,
+        "excerpt": "    hapax_count = sum(1 for f in freq.values() if f == 1)"
+      },
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 48,
+        "excerpt": "    hapax_ratio = round(hapax_count / len(freq), 3) if freq else 0.0"
+      },
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 67,
+        "excerpt": "        rare = [w for w in words if freq.get(w.lower(), 0) == 1 and len(w) > 5]"
+      }
+    ],
+    "impact_on_screened_person": "Scores track error rate and noise rather than skill, so dyslexic or non-native applicants get unpredictable results, and nothing tells the reviewer that an accommodation or alternative assessment may be needed.",
+    "fixability": "guardrail",
+    "fix": "Spell-normalise tokens before diversity metrics, flag high-misspelling texts as low reliability, and add an accommodation/disclosure workflow that routes such texts to human review rather than a score.",
+    "acceptance_test": "test_misspelled_text_not_scored_higher_than_clean_text_and_flagged_low_reliability",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-011",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P1",
+    "title": "No criterion-validity or base-rate evidence: scores are used as screening classifications without PPV",
+    "claim": "README asserts verbal fluency 'correlates with cognitive ability' and the pipeline emits IQ classifications (Gifted/Below Average/Low), but there is no validation dataset, correlation with an established IQ measure, or base-rate analysis anywhere; golden_scores.json only freezes current outputs. Even with a modest correlation, a screen at a low cut-off would have very low positive predictive value, which the output never conveys.",
+    "evidence": [
+      {
+        "file": "README.md",
+        "line": 29,
+        "excerpt": "Verbal fluency — the richness, complexity, and coherence of written language — correlates with cognitive ability measures."
+      },
+      {
+        "file": "tests/fixtures/golden_scores.json",
+        "line": 1,
+        "excerpt": "{"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 89,
+        "excerpt": "        \"classification\": band[\"label\"],"
+      }
+    ],
+    "impact_on_screened_person": "Applicants are labelled 'Low' or 'Below Average' on an unvalidated proxy; most flagged people would be false positives at realistic base rates, with no way to contest the label.",
+    "fixability": "process",
+    "fix": "Write a validation-study protocol (criterion measure, sample sizes per language, reliability, correlation, PPV/NPV at candidate cut-offs and base rates) and gate IQ/classification output behind a documented validation status.",
+    "acceptance_test": "doc: docs/validation/validation-study-protocol.md exists and specifies criterion measure, per-language sample size, reliability and PPV at stated base rates",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-012",
+    "category": "fallacy",
+    "persona": "pragmatist",
+    "severity": "P1",
+    "title": "No adverse-impact or subgroup-parity monitoring for a hiring/admissions screen",
+    "claim": "Nothing in the code, tests or CI measures score differences across language, dialect/register, disability or other protected groups (four-fifths rule, standardised mean difference); the only tests are golden snapshots on tracked examples and unit tests. Verified cross-language and register effects exist (see other findings), so an unmonitored deployment would produce disparate impact.",
+    "evidence": [
+      {
+        "file": "tests/test_golden.py",
+        "line": 0,
+        "excerpt": "Absence: no subgroup parity or adverse-impact test exists in tests/ or .github/workflows/ci.yml"
+      },
+      {
+        "file": "scripts/pipeline.py",
+        "line": 21,
+        "excerpt": "def run_pipeline(text: str) -> dict:"
+      }
+    ],
+    "impact_on_screened_person": "Groups defined by language, region or disability may be rejected at disproportionate rates with no detection mechanism or remedy.",
+    "fixability": "process",
+    "fix": "Define an adverse-impact monitoring protocol (groups, metrics, four-fifths threshold, review cadence, remediation) and add a parity test harness over paired fixtures.",
+    "acceptance_test": "doc: docs/fairness/adverse-impact-protocol.md exists and defines groups, metrics, four-fifths threshold and remediation owner",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  }
+]

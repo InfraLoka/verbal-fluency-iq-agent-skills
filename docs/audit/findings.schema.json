@@ -1,0 +1,37 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AEGIS finding",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "category", "persona", "severity", "title", "claim", "evidence",
+               "impact_on_screened_person", "fixability", "fix", "acceptance_test",
+               "phase", "status", "depends_on"],
+  "properties": {
+    "id": {"type": "string", "pattern": "^[FGN]-[0-9]{3}$"},
+    "category": {"enum": ["fallacy", "gap", "feature"]},
+    "persona": {"enum": ["data-detective", "skeptical-economist", "pragmatist",
+                         "cto", "cro", "hacker", "ceo"]},
+    "severity": {"enum": ["P0", "P1", "P2", "P3"]},
+    "title": {"type": "string", "minLength": 5},
+    "claim": {"type": "string", "minLength": 20},
+    "evidence": {
+      "type": "array", "minItems": 1,
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["file", "line", "excerpt"],
+        "properties": {
+          "file": {"type": "string"},
+          "line": {"type": "integer", "minimum": 0},
+          "excerpt": {"type": "string"}
+        }
+      }
+    },
+    "impact_on_screened_person": {"type": "string", "minLength": 10},
+    "fixability": {"enum": ["code", "guardrail", "process"]},
+    "fix": {"type": "string", "minLength": 10},
+    "acceptance_test": {"type": "string", "minLength": 5},
+    "phase": {"type": "integer", "minimum": 2, "maximum": 5},
+    "status": {"enum": ["open", "done"]},
+    "depends_on": {"type": "array", "items": {"type": "string", "pattern": "^[FGN]-[0-9]{3}$"}}
+  }
+}

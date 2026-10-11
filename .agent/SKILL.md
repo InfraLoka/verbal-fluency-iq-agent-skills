@@ -64,9 +64,15 @@ Call these tools in order. Each output feeds the next.
 
 4. tool_analyze_syntactic(sentences_json, lang)
    → { mean_sentence_length, clause_density, subordination_index, dependency_depth, passive_ratio, score, evidence }
+   For lang="id" the analysis is rule-based (no spaCy parser exists for Indonesian):
+   clause_density/subordination/passive are computed from morphology, and
+   dependency_depth is null (not measurable), excluded from the score — never a fake 0.
 
-5. tool_analyze_semantic(text_clean, sentences_json, lang)
+5. tool_analyze_semantic(text_clean, sentences_json, lang, segment_boundaries_json?)
    → { argument_coherence, topic_drift_index, lexical_chain_density, entity_sophistication, score, evidence }
+   Optional segment_boundaries_json: JSON array of sentence idx values where a new
+   document begins (multi-file subjects). Cross-document transitions are excluded so
+   the subject is not penalised for drift at file seams. Omit for single documents.
 
 6. tool_analyze_readability(text_clean, lang)
    → { flesch_reading_ease, gunning_fog, ari, coleman_liau, score, evidence }

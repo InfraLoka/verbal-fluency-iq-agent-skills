@@ -1,3 +1,4 @@
+# Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
 import json
 import sys
 import os
@@ -48,9 +49,20 @@ def tool_analyze_syntactic(sentences_json: str, lang: str) -> str:
 
 
 @mcp.tool()
-def tool_analyze_semantic(text: str, sentences_json: str, lang: str) -> str:
-    """Compute argument coherence, topic drift, lexical chain density. Returns score and evidence."""
-    return json.dumps(analyze_semantic(text, json.loads(sentences_json), lang))
+def tool_analyze_semantic(
+    text: str, sentences_json: str, lang: str, segment_boundaries_json: str = ""
+) -> str:
+    """Compute argument coherence, topic drift, lexical chain density. Returns score and evidence.
+
+    segment_boundaries_json: optional JSON array of sentence idx values where a new
+    document begins; cross-document transitions are excluded. Empty string = none.
+    """
+    boundaries = (
+        json.loads(segment_boundaries_json) if segment_boundaries_json else None
+    )
+    return json.dumps(
+        analyze_semantic(text, json.loads(sentences_json), lang, boundaries)
+    )
 
 
 @mcp.tool()

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
 import sys
 
 sys.path.insert(0, "mcp-server")
@@ -68,3 +69,28 @@ def test_evidence_has_coherence_and_note():
 def test_entity_sophistication_is_valid_label():
     result = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
     assert result["entity_sophistication"] in ("ABSTRACT", "CONCRETE", "MINIMAL")
+
+
+def test_default_segment_boundaries_unchanged():
+    # Passing None must be identical to passing nothing.
+    a = analyze_semantic(INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en")
+    b = analyze_semantic(INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en", None)
+    assert a == b
+
+
+def test_segment_boundary_excludes_cross_document_pair():
+    # With a boundary before idx 2, the 1→2 transition is dropped, changing the mean.
+    base = analyze_semantic(INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en")
+    seg = analyze_semantic(
+        INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en", segment_boundaries=[2]
+    )
+    assert seg["argument_coherence"] != base["argument_coherence"]
+
+
+def test_all_pairs_straddle_boundaries_returns_gracefully():
+    # Every sentence is its own document → no within-document transitions.
+    result = analyze_semantic(
+        INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en", segment_boundaries=[1, 2, 3]
+    )
+    assert result["argument_coherence"] is None
+    assert "note" in result

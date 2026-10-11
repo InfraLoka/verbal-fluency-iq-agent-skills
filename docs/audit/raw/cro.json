@@ -1,0 +1,326 @@
+[
+  {
+    "id": "X-001",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P0",
+    "title": "Hiring/admissions disclaimer is opt-in only and absent from default reports",
+    "claim": "The only 'do not use for hiring' warning in the report is inside the verbose_caveats branch; the default report and --scores-only/--json outputs carry no use restriction, while the tool is intended for screening people.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 265,
+        "excerpt": "    if verbose_caveats or format_flag == \"--verbose-caveats\":"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 277,
+        "excerpt": "\"    • Do not use these estimates for hiring, clinical, or legal decisions.\""
+      }
+    ],
+    "impact_on_screened_person": "A recruiter receiving the default or slim score output sees an IQ number with no warning and may reject a candidate on it.",
+    "fixability": "guardrail",
+    "fix": "Make a prohibited/high-risk-use notice mandatory in every output format (including --scores-only and --json via a 'use_restriction' field) and require an explicit use_context acknowledgement; refuse or degrade when context is hiring/admission.",
+    "acceptance_test": "test_reporter_default_and_slim_outputs_always_include_use_restriction",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-002",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P0",
+    "title": "No consent or lawful-basis capture for processing a person's text (UU PDP)",
+    "claim": "Nothing in the server or pipeline records data-subject consent, lawful basis, or purpose before analysing a person's writing; UU PDP No. 27/2022 requires explicit consent/lawful basis and purpose limitation, and inferred IQ/education is sensitive profiling.",
+    "evidence": [
+      {
+        "file": "mcp-server/server.py",
+        "line": 0,
+        "excerpt": "absence: no consent, subject_id, purpose or lawful_basis parameter on any tool_* function (e.g. tool_detect_language(text: str))"
+      },
+      {
+        "file": "README.md",
+        "line": 904,
+        "excerpt": "**Privacy.** Text submitted to the MCP server is processed locally."
+      }
+    ],
+    "impact_on_screened_person": "A person's writing is scored and profiled without their knowledge or ability to refuse, with no lawful basis on record.",
+    "fixability": "process",
+    "fix": "Add docs/compliance/consent-and-lawful-basis.md with consent text (ID/EN), purpose statement and lawful-basis matrix, and require a consent_ref + purpose argument that the pipeline refuses to run without.",
+    "acceptance_test": "doc: docs/compliance/consent-and-lawful-basis.md exists and names UU PDP 27/2022 consent, purpose limitation and withdrawal procedure",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-003",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P0",
+    "title": "No audit trail of who scored whom, when, with which model/norm version",
+    "claim": "Scoring is stateless: no record of request, operator, input hash, norm file version, code version or output is persisted, so a contested decision cannot be reconstructed or defended.",
+    "evidence": [
+      {
+        "file": "scripts/pipeline.py",
+        "line": 33,
+        "excerpt": "    return {\n        \"lang\": lang,\n        \"vfs\": vfs[\"vfs\"],"
+      },
+      {
+        "file": "mcp-server/server.py",
+        "line": 0,
+        "excerpt": "absence: no logging, audit record or request id anywhere in server.py"
+      }
+    ],
+    "impact_on_screened_person": "A rejected applicant cannot obtain or contest the basis of the decision, and the operator cannot prove what was computed.",
+    "fixability": "code",
+    "fix": "Emit an append-only audit record (UTC timestamp, operator id, SHA-256 of input, tool versions, norms hash, outputs) for every pipeline run, stored without raw text.",
+    "acceptance_test": "test_pipeline_run_appends_audit_record_with_input_hash_and_norms_version",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-004",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P0",
+    "title": "No human-in-the-loop gate or automated-decision safeguard",
+    "claim": "Outputs are final numeric verdicts with a classification label; there is no review-required state, no override/appeal field and no block on fully automated use. UU PDP and the EU AI Act (Annex III employment/education) require human oversight and a right to contest automated decisions.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 108,
+        "excerpt": "    line(f\"  Classification  : {iq_result['classification']}\")"
+      },
+      {
+        "file": "mcp-server/server.py",
+        "line": 0,
+        "excerpt": "absence: no human_review, reviewer or appeal parameter or state"
+      }
+    ],
+    "impact_on_screened_person": "A low-band label such as 'Low' can drive an automated rejection with nobody accountable and no route to appeal.",
+    "fixability": "guardrail",
+    "fix": "Add a mandatory 'decision_status: advisory_only / requires_human_review' field to all outputs, a reviewer sign-off record, and refuse outputs shaped as pass/fail thresholds.",
+    "acceptance_test": "test_report_marks_every_output_advisory_requires_human_review",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-005",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P1",
+    "title": "No adverse-impact (EEOC four-fifths) or subgroup fairness monitoring",
+    "claim": "No code or doc computes selection-rate ratios or score gaps across protected groups (language, gender, region, ethnicity, age); the four-fifths rule and EU AI Act bias testing are unaddressed although norms are English-derived.",
+    "evidence": [
+      {
+        "file": "tests/test_mapper.py",
+        "line": 0,
+        "excerpt": "absence: no subgroup or adverse-impact test; only per-function unit tests"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 262,
+        "excerpt": "line(\"    • IQ/VFS norms are English-derived and only approximately adapted to\")"
+      }
+    ],
+    "impact_on_screened_person": "Indonesian-language and regional-dialect applicants are systematically scored lower and screened out at a disproportionate rate, undetected.",
+    "fixability": "process",
+    "fix": "Write docs/compliance/adverse-impact-protocol.md defining protected groups, selection-rate ratio and four-fifths check, and add scripts/adverse_impact.py that runs on a labelled cohort and fails below 0.8.",
+    "acceptance_test": "doc: docs/compliance/adverse-impact-protocol.md exists and specifies four-fifths ratio computation and remediation threshold",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-006",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P1",
+    "title": "Education-level inference is protected-attribute-adjacent with no safeguard",
+    "claim": "estimate_education_level infers formal schooling (S1/S2/S3) from text style and the report asserts 'Writing style consistent with X authorship', producing credentials-like claims about a person that may be wrong and discriminatory in admissions.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 243,
+        "excerpt": "line(f\"  Writing style consistent with {edu_result['level_en']} authorship.\")"
+      },
+      {
+        "file": "mcp-server/config/edu_norms.json",
+        "line": 0,
+        "excerpt": "absence: no source, validation or citation for fog/ari/lexical-density thresholds"
+      }
+    ],
+    "impact_on_screened_person": "Self-taught or non-native writers are labelled as lower-educated, creating a false credential record that can bar them.",
+    "fixability": "guardrail",
+    "fix": "Remove the education-level claim from default output or gate behind explicit non-screening use; add provenance metadata to edu_norms.json and a warning that it is not a credential.",
+    "acceptance_test": "test_education_estimate_not_in_default_report_for_screening_context",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-007",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P1",
+    "title": "No data minimisation: reports quote the subject's own sentences verbatim",
+    "claim": "The report embeds verbatim sentences (truncated at 100 chars) as evidence in every section, and the mental-age and age inputs are collected though not necessary for any screening decision; this violates data minimisation and spreads personal content into reports.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 188,
+        "excerpt": "        line(f\"    → {_trunc(ev['sentence'])}\")"
+      },
+      {
+        "file": "mcp-server/server.py",
+        "line": 103,
+        "excerpt": "def tool_predict_mental_age(iq_estimate: float, chronological_age: int = 0) -> str:"
+      }
+    ],
+    "impact_on_screened_person": "Sensitive personal statements and age (a protected attribute) are reproduced in documents that circulate to recruiters.",
+    "fixability": "code",
+    "fix": "Add a redact_evidence option defaulting on (sentence index plus triggers only) and make chronological_age opt-in with documented purpose.",
+    "acceptance_test": "test_report_default_redacts_verbatim_sentences",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-008",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P1",
+    "title": "No retention, deletion or data-subject-rights process",
+    "claim": "There is no retention schedule, deletion procedure or access/correction/objection process for scored text or reports; example/ outputs show reports are written to disk as plain Markdown.",
+    "evidence": [
+      {
+        "file": "README.md",
+        "line": 0,
+        "excerpt": "absence: no retention period, deletion, data-subject access/erasure or DPO contact documented"
+      },
+      {
+        "file": "scripts/pipeline.py",
+        "line": 0,
+        "excerpt": "absence: no output-handling or purge logic"
+      }
+    ],
+    "impact_on_screened_person": "A screened person has no way to have their profile deleted or corrected, contrary to UU PDP data-subject rights.",
+    "fixability": "process",
+    "fix": "Create docs/compliance/retention-and-dsr.md with retention schedule, erasure/access procedure, response SLAs and a DPO contact, and a purge script for stored reports.",
+    "acceptance_test": "doc: docs/compliance/retention-and-dsr.md exists and defines retention period, erasure and access request SLAs",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-009",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P1",
+    "title": "Privacy claim is unverified and cross-border transfer is unaddressed",
+    "claim": "README asserts local processing and that nothing leaves the machine, yet the semantic model is downloaded from an external host and the MCP tool is invoked by a hosted LLM agent, which transmits the candidate's text to a third-party model provider; no cross-border transfer analysis (UU PDP) exists.",
+    "evidence": [
+      {
+        "file": "README.md",
+        "line": 904,
+        "excerpt": "No data is sent to external services beyond the embedding model (downloaded locally on first use)."
+      },
+      {
+        "file": ".agent/SKILL.md",
+        "line": 32,
+        "excerpt": "chronological_age: \"integer — improves mental age precision\""
+      }
+    ],
+    "impact_on_screened_person": "Candidate writing and age are sent to foreign model providers without notice or a transfer mechanism.",
+    "fixability": "process",
+    "fix": "Correct the privacy statement, and write docs/compliance/data-flow-and-transfer.md mapping every data flow including the agent/LLM host, with transfer basis and DPIA reference.",
+    "acceptance_test": "doc: docs/compliance/data-flow-and-transfer.md exists and lists every external recipient with transfer basis",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-010",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P1",
+    "title": "No DPIA or EU AI Act high-risk conformity documentation",
+    "claim": "Employment/education screening is high-risk under EU AI Act Annex III and automated profiling requires a DPIA under UU PDP; the repo contains no DPIA, risk-management file, technical documentation or conformity assessment.",
+    "evidence": [
+      {
+        "file": "README.md",
+        "line": 0,
+        "excerpt": "absence: no DPIA, AI Act classification, or risk-management documentation"
+      },
+      {
+        "file": "docs",
+        "line": 0,
+        "excerpt": "absence: no docs/compliance directory"
+      }
+    ],
+    "impact_on_screened_person": "Deploying without these exposes screened persons to an unassessed high-risk system and the operator to regulatory sanction.",
+    "fixability": "process",
+    "fix": "Produce docs/compliance/dpia.md and docs/compliance/ai-act-classification.md covering risk, mitigation, accuracy, oversight and logging.",
+    "acceptance_test": "doc: docs/compliance/dpia.md exists and includes risk register, mitigations and sign-off section",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-011",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P1",
+    "title": "Model and norm changes are uncontrolled and unversioned",
+    "claim": "Norm files are loaded without version, hash or changelog and outputs omit any model_version, so a threshold edit silently changes every person's band; golden tests only pin outputs, not governance.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 16,
+        "excerpt": "            _iq_norms = json.load(f)"
+      },
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 34,
+        "excerpt": "\"default_chronological_age\": 30"
+      }
+    ],
+    "impact_on_screened_person": "Two applicants scored before and after a silent norm change are judged on different scales with no record.",
+    "fixability": "code",
+    "fix": "Add version and sha256 fields to config files, include norms_version and code_version in every output, and require a recorded approval for changes.",
+    "acceptance_test": "test_outputs_include_norms_version_and_hash",
+    "phase": 3,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-012",
+    "category": "gap",
+    "persona": "cro",
+    "severity": "P1",
+    "title": "Score explanation does not state how the IQ was derived or that it is unvalidated",
+    "claim": "The report's IQ explanation says only 'Driven by lexical sophistication and syntactic complexity' while the actual mapping is a linear VFS to IQ band lookup with a CI derived from the confidence tier, not from validation; the README concedes this but the report body (right-to-explanation) does not.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 231,
+        "excerpt": "f\"  Driven by lexical sophistication (score {vfs_result['lexical']}) and syntactic complexity (score {vfs_result['syntactic']}).\""
+      },
+      {
+        "file": "README.md",
+        "line": 894,
+        "excerpt": "The 95% CI is mathematically derived from the confidence tier, not from validation against a reference population."
+      }
+    ],
+    "impact_on_screened_person": "A person told they scored 'Below Average' cannot learn that the number has no empirical validation.",
+    "fixability": "guardrail",
+    "fix": "State in every report that the CI is not empirically validated and list the actual mapping and weights; label output 'unvalidated estimate' when no validation study exists.",
+    "acceptance_test": "test_report_states_ci_is_not_empirically_validated",
+    "phase": 4,
+    "status": "open",
+    "depends_on": []
+  }
+]

@@ -1,3 +1,4 @@
+# Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
 from collections import Counter
 from typing import List
 

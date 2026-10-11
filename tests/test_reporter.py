@@ -1,3 +1,4 @@
+# Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
 import sys
 
 sys.path.insert(0, "mcp-server")
@@ -151,3 +152,30 @@ def test_verbose_caveats_adds_extended_section():
 def test_report_contains_confidence_label():
     result = _call("--report")
     assert "HIGH" in result["report"]
+
+
+def test_id_report_shows_depth_na_and_caveats():
+    id_lang = {"lang": "id", "confidence": 0.95}
+    id_syntactic = {**SYNTACTIC, "dependency_depth": None}
+    report = generate_report(
+        id_lang,
+        PREP,
+        LEXICAL,
+        id_syntactic,
+        SEMANTIC,
+        READABILITY,
+        {**VFS, "lang": "id"},
+        IQ,
+        MENTAL_AGE,
+        EDU,
+        format_flag="--report",
+    )["report"]
+    assert "N/A (no parser for id)" in report
+    assert "no dependency parser" in report
+    assert "English-derived" in report
+
+
+def test_en_report_still_shows_numeric_depth():
+    result = _call("--report")
+    assert "Dependency tree depth : 6.0" in result["report"]
+    assert "no parser for id" not in result["report"]

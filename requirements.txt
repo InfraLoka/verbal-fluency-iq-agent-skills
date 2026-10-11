@@ -10,3 +10,4 @@ nltk>=3.8.1
 scikit-learn>=1.4.0
 numpy>=1.26.0
 pytest>=8.0.0
+jsonschema>=4.21.0

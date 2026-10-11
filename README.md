@@ -932,3 +932,11 @@ venv/bin/python -m pytest tests/test_pipeline.py -v
 ```
 
 All tests use real text inputs — no mocks — to catch integration issues early.
+
+---
+
+## License
+
+Proprietary. Copyright (c) 2026 InfraLoka. All rights reserved. See [LICENSE](LICENSE).
+Use, copying, or distribution requires a written agreement with InfraLoka.
+Versions previously published under GPL-3.0 remain GPL only for those who received them.

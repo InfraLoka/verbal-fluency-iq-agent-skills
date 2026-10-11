@@ -1,0 +1,435 @@
+[
+  {
+    "id": "X-001",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P0",
+    "title": "Verbal-fluency style score is reified as IQ with no criterion validation",
+    "claim": "The VFS is a hand-weighted composite of surface text statistics. It is mapped to an IQ band by a hand-written table, then reported as a point IQ with a '95% CI' and classification. No criterion study (correlation with WAIS/Raven, norm sample) exists in the repo. Construct validity of 'text style = general intelligence' is assumed, not shown.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 36,
+        "excerpt": "vfs = round("
+      },
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 4,
+        "excerpt": "\"vfs_min\": 85, \"vfs_max\": 100,"
+      },
+      {
+        "file": "README.md",
+        "line": 894,
+        "excerpt": "The 95% CI is mathematically derived from the confidence tier, not from validation against a reference population."
+      }
+    ],
+    "impact_on_screened_person": "A candidate is assigned a numeric IQ and a label such as 'Low' or 'Gifted' by an instrument whose only validity evidence is the author's thresholds; a hiring or admissions reader will treat this as a measurement.",
+    "fixability": "guardrail",
+    "fix": "Refuse to emit IQ/classification as a measurement. Output only a labelled 'writing-style index' with explicit 'not an intelligence measure' text in every output format, and gate IQ fields behind a documented validation-study pass flag (default off).",
+    "acceptance_test": "test_iq_output_requires_validation_flag_and_style_index_label",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-002",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P0",
+    "title": "Percentile is non-monotonic and contradicts the IQ it accompanies",
+    "claim": "predict_iq computes percentile by interpolating from band percentile_min to a hardcoded 95 within every band. The top of each band reports the 95th percentile, so IQ 74 ('Low') reports 95th percentile while IQ 90 reports 25th. Verified by running predict_iq(39.9,0.82): IQ 74, classification Low, percentile 95.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 81,
+        "excerpt": "percentile = round("
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 82,
+        "excerpt": "band[\"percentile_min\"] + position * (95 - band[\"percentile_min\"])"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 109,
+        "excerpt": "line(f\"  Percentile      : ~{iq_result['percentile']}th\")"
+      }
+    ],
+    "impact_on_screened_person": "A screened person near a band's upper edge gets a wildly wrong percentile (95th for IQ 74), which can be read either way by a reviewer; it is demonstrably false output.",
+    "fixability": "code",
+    "fix": "Derive percentile from the normal CDF of the IQ point estimate (mean 100, sd 15) or drop it. Add a monotonicity property test across all VFS values.",
+    "acceptance_test": "test_percentile_monotonic_in_iq_and_matches_normal_cdf",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-003",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P1",
+    "title": "Mental age uses the ratio-IQ formula, which is undefined for adults",
+    "claim": "mental_age = IQ/100 * chronological_age is the discredited ratio-IQ concept, valid only for children. The tool defaults to age 30 and accepts any age; at age 70 an IQ of 120 yields a 'mental age' of 84. Ratio IQ also contradicts the deviation-IQ scale used by iq_norms bands.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 105,
+        "excerpt": "\"mental_age\": round((iq_estimate / 100) * age, 1),"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 108,
+        "excerpt": "\"formula\": \"mental_age = (iq / 100) * chronological_age\""
+      },
+      {
+        "file": "mcp-server/server.py",
+        "line": 104,
+        "excerpt": "Compute mental age from IQ. Pass chronological_age=0 to use population default (30)."
+      }
+    ],
+    "impact_on_screened_person": "Adult applicants receive a meaningless 'mental age' (e.g. 19 for a 16-year-old, 84 for a 70-year-old) and an assumed age of 30 silently substitutes for their real age, producing an incorrect and demeaning label.",
+    "fixability": "code",
+    "fix": "Remove mental age from default output, or restrict it to chronological_age < 16 with an explicit 'ratio model, children only' warning; refuse when age is assumed or >= 16.",
+    "acceptance_test": "test_mental_age_refused_for_adults_and_assumed_age",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-004",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P1",
+    "title": "Education level is inferred from readability and treated as formal schooling attainment",
+    "claim": "estimate_education_level maps Fog/ARI/lexical density thresholds directly to degree levels (S3...SD). Readability measures text difficulty, which depends on topic, audience and editing; it is not a function of the writer's schooling. The level labels are hand-set and unvalidated. Verified: a plain-language English passage returns edu 'SD' (Primary School) and IQ 66.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 117,
+        "excerpt": "for level in norms[\"levels\"]:"
+      },
+      {
+        "file": "mcp-server/config/edu_norms.json",
+        "line": 4,
+        "excerpt": "\"fog_min\": 17, \"ari_min\": 16, \"lexical_density_min\": 0.60,"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 243,
+        "excerpt": "line(f\"  Writing style consistent with {edu_result['level_en']} authorship.\")"
+      }
+    ],
+    "impact_on_screened_person": "A person who writes plainly (professional plain-language training, ESL, a different register) is labelled primary-school educated; a ghostwritten or template-heavy text is labelled doctoral. Education claims could be used to reject or approve people on a false basis.",
+    "fixability": "guardrail",
+    "fix": "Rename to 'text complexity band' with no degree labels; never output S1/S2/S3/SD codes as the writer's education. Add explicit warning that education cannot be inferred from text.",
+    "acceptance_test": "test_education_output_is_text_complexity_not_degree",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-005",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P1",
+    "title": "Confidence and CI depend only on word count, not on reliability or validity",
+    "claim": "Confidence is a step function of word_count and the IQ 'CI' is 15 - confidence*10 half-width, giving +/-5..+/-12. It encodes neither measurement reliability (no test-retest) nor the validity gap between text and IQ (r with IQ for text features is modest in the literature the tool cites). A 1300-word text gets +/-6, presented as a 95% CI. Verified: length 300 vs 1500 words moved IQ 98 -> 99 with CI [91,105] -> [93,105].",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 80,
+        "excerpt": "ci_half = round(15 - confidence * 10)"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 51,
+        "excerpt": "extra = min(0.13, (word_count - 300) / 1000 * 0.13)"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 107,
+        "excerpt": "line(f\"  95% CI range    : {iq_result['ci_low']} – {iq_result['ci_high']}\")"
+      }
+    ],
+    "impact_on_screened_person": "A narrow interval gives a hiring panel false precision; the screened person is denied by a number whose real uncertainty is many times larger.",
+    "fixability": "guardrail",
+    "fix": "Do not label this a 95% CI. Report a wide interval from a validation study (standard error of estimate) or omit intervals and show 'uncalibrated' instead; confidence label must reflect validation, not length.",
+    "acceptance_test": "test_ci_not_labelled_95_without_calibration",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-006",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P1",
+    "title": "Hard-coded band mapping is circular: bands define IQ and then 'confirm' it",
+    "claim": "iq_norms.json assigns VFS 0-100 to IQ 55-145 in five hand-chosen bands and interpolates linearly. IQ is then a deterministic function of the weights the author picked; the golden fixtures only record the tool's own outputs. Nothing anchors the mapping to an external criterion, so the output cannot be wrong by construction. Band slopes also differ (20 IQ over 15 VFS vs 20 over 40), creating arbitrary step changes at band edges (VFS 54.99 -> IQ 89, 55 -> 90 class change).",
+    "evidence": [
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 18,
+        "excerpt": "\"label\": \"Average\","
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 78,
+        "excerpt": "iq_point = round(band[\"iq_min\"] + position * (band[\"iq_max\"] - band[\"iq_min\"]))"
+      },
+      {
+        "file": "tests/fixtures/golden_scores.json",
+        "line": 3,
+        "excerpt": "\"lang\": \"id\","
+      }
+    ],
+    "impact_on_screened_person": "Small score shifts (one hapax word) can move someone across a classification boundary such as Average/Below Average with no empirical meaning.",
+    "fixability": "process",
+    "fix": "Write a validation-study protocol: collect paired text + standardized test scores, fit and cross-validate the mapping, publish error rates by subgroup, and replace the hand-set table. Golden tests stay regression-only and must be labelled so.",
+    "acceptance_test": "doc: docs/validation/validation-study-protocol.md exists and states sample size, criterion measure, held-out evaluation and subgroup error reporting",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-007",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P1",
+    "title": "Genre, topic and editing confounds are uncontrolled",
+    "claim": "The pipeline treats any text as a window on ability: it strips only URLs/mentions and ignores genre, topic, register, copy-editing, spell-check, templates or quoted material. Semantic coherence rewards topical repetition, entity_sophistication is set by whether NER finds ORG/LAW labels, and README states it works on 'essays, social media posts, chat logs, transcripts'. Verified: formal jargon passage scores VFS 72.5 vs 22.5 for a plain one with similar ideas.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/preprocess.py",
+        "line": 80,
+        "excerpt": "cleaned = re.sub(r\"http\\S+|www\\S+\", \"\", text)"
+      },
+      {
+        "file": "mcp-server/tools/semantic.py",
+        "line": 13,
+        "excerpt": "ABSTRACT_TYPES = {\"LAW\", \"ORG\", \"NORP\", \"EVENT\", \"WORK_OF_ART\", \"LANGUAGE\"}"
+      },
+      {
+        "file": "README.md",
+        "line": 3,
+        "excerpt": "Works on any text type: essays, social media posts, chat logs, transcripts."
+      }
+    ],
+    "impact_on_screened_person": "An applicant who submits a chat log gets a lower IQ than one who submits a legal memo; the scores reflect genre not ability, with no warning.",
+    "fixability": "guardrail",
+    "fix": "Require an input-genre declaration and compare only within matched genre; emit a 'not comparable across genres' warning and degrade confidence to LOW when genre is unknown or conversational.",
+    "acceptance_test": "test_genre_mismatch_degrades_confidence_and_warns",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-008",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P1",
+    "title": "No control for AI-assisted writing, translation, dictation or ghostwriting",
+    "claim": "Authorship provenance is never checked or asked. LLM-polished, machine-translated, dictated or edited text raises lexical and syntactic scores while the pipeline reports the result as the person's own verbal ability. The report asserts 'authorship' directly. No provenance field exists in any tool signature.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 243,
+        "excerpt": "line(f\"  Writing style consistent with {edu_result['level_en']} authorship.\")"
+      },
+      {
+        "file": "mcp-server/server.py",
+        "line": 0,
+        "excerpt": "absence: no tool takes an authorship/provenance/assistance parameter and no output carries one"
+      }
+    ],
+    "impact_on_screened_person": "A candidate who wrote unaided is outscored by one who used an LLM or editor, and a candidate who wrote through a screen reader or dictation is penalised; the result is attributed to the person as their own.",
+    "fixability": "guardrail",
+    "fix": "Add mandatory provenance attestation in the input schema, print it on every report, and label scores 'valid only for supervised, unaided, same-prompt writing'; refuse hiring-use output without it.",
+    "acceptance_test": "test_report_includes_provenance_caveat_and_requires_attestation",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-009",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P1",
+    "title": "Indonesian scores use English-calibrated readability, syllable and density formulas",
+    "claim": "For Indonesian, Flesch uses the English coefficients, while Fog, ARI and Coleman-Liau come from textstat after set_lang('en_US'); the content-word proxy is len>3, which counts function words (dengan, untuk, karena, yang tidak). The same English cut-offs feed both VFS and the education table. Verified: a short plain Indonesian passage scores VFS 24.7, IQ 67, edu SMP.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/readability.py",
+        "line": 23,
+        "excerpt": "textstat.set_lang(\"en_US\")"
+      },
+      {
+        "file": "mcp-server/tools/readability.py",
+        "line": 54,
+        "excerpt": "flesch = round(206.835 - 1.015 * avg_sent_len - 84.6 * avg_syl, 1)"
+      },
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 52,
+        "excerpt": "content_words = [t for t in alpha if len(t) > 3]"
+      }
+    ],
+    "impact_on_screened_person": "Indonesian-speaking applicants (the tool's stated target) get systematically different IQ/education labels than English speakers for equivalent writing; a score in the 'Low' band can be an artefact of language.",
+    "fixability": "guardrail",
+    "fix": "Until language-specific norms exist, mark Indonesian output as 'uncalibrated' and suppress IQ/education labels; add a function-word list for Indonesian and cross-language invariance tests.",
+    "acceptance_test": "test_indonesian_output_suppresses_iq_and_education_until_calibrated",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-010",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P1",
+    "title": "Hapax and MATTR components bias scores by text length and then confidence rewards length",
+    "claim": "Hapax ratio is a monotone-decreasing function of text length (Heaps law) and is weighted 30% of the lexical score with fixed [0.2,0.7] scaling; MATTR is window-fixed but avg word length and ratios are not length-normalised. Long texts are scored on a different effective scale than short ones, and confidence rises with length at the same time. Verified on one passage: 117 words -> VFS 55.2, 861 words -> 61.9.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 48,
+        "excerpt": "hapax_ratio = round(hapax_count / len(freq), 3) if freq else 0.0"
+      },
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 56,
+        "excerpt": "hapax_score = min(100.0, max(0.0, (hapax_ratio - 0.2) / 0.5 * 100))"
+      },
+      {
+        "file": "mcp-server/tools/mapper.py",
+        "line": 44,
+        "excerpt": "if word_count < 30:"
+      }
+    ],
+    "impact_on_screened_person": "The same writer gets different IQ values depending on how much they were asked to write; a short test sample can systematically push a person down a band.",
+    "fixability": "code",
+    "fix": "Replace raw hapax ratio with a length-corrected measure (e.g. fixed-window hapax or MTLD), calibrate with samples truncated to fixed lengths, and add a length-invariance test.",
+    "acceptance_test": "test_vfs_stable_across_truncation_lengths_within_tolerance",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-011",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P2",
+    "title": "Dominance of surface complexity: the VFS cannot distinguish ornate from competent",
+    "claim": "Every sub-score rewards longer words, longer sentences, rarer tokens and more subordination (monotone increasing). There is no check for correctness, relevance, argument quality or fluency errors; padding with jargon raises the score. 'Verbal fluency' (generation rate) is also a different construct from this readability-style index but shares the name.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/lexical.py",
+        "line": 57,
+        "excerpt": "awl_score = min(100.0, max(0.0, (avg_word_length - 3.5) / 4.0 * 100))"
+      },
+      {
+        "file": "mcp-server/tools/readability.py",
+        "line": 62,
+        "excerpt": "fog_score = min(100.0, max(0.0, (fog - 6) / 12 * 100))"
+      },
+      {
+        "file": "README.md",
+        "line": 3,
+        "excerpt": "Predict IQ, mental age, and education level from text passages using verbal fluency as a psycholinguistic proxy."
+      }
+    ],
+    "impact_on_screened_person": "A candidate who communicates clearly and concisely (usually what employers need) is scored lower than one who pads text, rewarding obfuscation.",
+    "fixability": "guardrail",
+    "fix": "Rename the construct 'lexical-syntactic complexity', document that it rewards complexity not quality, and add an adversarial-padding test that the system flags rather than rewards.",
+    "acceptance_test": "test_jargon_padding_flagged_not_rewarded",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-012",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P2",
+    "title": "Research-basis block implies validation the cited works do not provide",
+    "claim": "The report ends with a RESEARCH BASIS list (Pennebaker, Crossley, Mairesse) printed on every full report, implying the mapping reproduces those studies. Those studies report modest correlations at group level with personality or essay quality, not individual IQ estimation, and nothing in the repo reproduces their coefficients.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 284,
+        "excerpt": "line(\"  Pennebaker et al.   — LIWC personality/intelligence studies\")"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 286,
+        "excerpt": "line(\"  Mairesse et al.     — Big Five + intelligence from text\")"
+      }
+    ],
+    "impact_on_screened_person": "Authority-by-citation lends false scientific weight to a decision about a person and discourages reviewers from questioning the score.",
+    "fixability": "guardrail",
+    "fix": "Replace 'Research basis' with 'Inspired by' and add the real effect sizes / 'no individual-level validation' sentence; remove names from the report unless a reproduction is documented.",
+    "acceptance_test": "test_report_research_section_states_no_individual_validation",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-013",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P2",
+    "title": "Population-level norm presented as individual causal claim; mean-age default hides age effect",
+    "claim": "Verbal style changes with age, schooling era, dialect and disability, none of which enter predict_iq; chronological age is only used for the mental-age ratio. The default of 30 is called 'population median', not a validated one. No age-norming exists, so older or younger writers are compared against an unspecified reference.",
+    "evidence": [
+      {
+        "file": "mcp-server/config/iq_norms.json",
+        "line": 34,
+        "excerpt": "\"default_chronological_age\": 30"
+      },
+      {
+        "file": "README.md",
+        "line": 790,
+        "excerpt": "`default_chronological_age` is used when no `--age=N` flag is supplied. Set to the population median (30)."
+      }
+    ],
+    "impact_on_screened_person": "Age, dyslexia, second-language status and education era shift scores independent of ability; the person is nonetheless ranked against an anonymous reference.",
+    "fixability": "process",
+    "fix": "Define the reference population and norm groups in a written norming plan; require age and language-background fields and report within-group scores only.",
+    "acceptance_test": "doc: docs/validation/norming-plan.md exists and defines reference population, age bands and language-background strata",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  },
+  {
+    "id": "X-014",
+    "category": "fallacy",
+    "persona": "skeptical-economist",
+    "severity": "P2",
+    "title": "Hiring prohibition is shown only under an opt-in flag",
+    "claim": "The 'Do not use these estimates for hiring' line is emitted only when verbose_caveats is set; default reports, --json and --scores-only outputs contain no warning, even though the stated purpose is screening. README carries the warning but the output a decision-maker sees does not.",
+    "evidence": [
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 265,
+        "excerpt": "if verbose_caveats or format_flag == \"--verbose-caveats\":"
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 277,
+        "excerpt": "\"    • Do not use these estimates for hiring, clinical, or legal decisions.\""
+      },
+      {
+        "file": "mcp-server/tools/reporter.py",
+        "line": 46,
+        "excerpt": "if format_flag == \"--scores-only\":"
+      }
+    ],
+    "impact_on_screened_person": "A reviewer who only sees the slim JSON or the default report gets an IQ and education label with no limiting statement, making misuse for hiring the path of least resistance.",
+    "fixability": "code",
+    "fix": "Always emit a non-removable limitations/non-use notice in every format, including --json and --scores-only (e.g. a 'caveats' key), independent of the verbose flag.",
+    "acceptance_test": "test_all_output_formats_contain_non_use_notice",
+    "phase": 2,
+    "status": "open",
+    "depends_on": []
+  }
+]

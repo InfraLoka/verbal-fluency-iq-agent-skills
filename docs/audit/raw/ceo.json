@@ -1,0 +1,642 @@
+[
+ {
+  "id": "N-001",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "Calibration and validation harness against labelled reference corpus",
+  "claim": "No harness computes correlation, error or CI coverage against any criterion measure; the 95% CI is derived arithmetically from word count.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 80,
+    "excerpt": "ci_half = round(15 - confidence * 10)"
+   },
+   {
+    "file": "scripts/",
+    "line": 0,
+    "excerpt": "ABSENT: no validate/calibrate script; only capture_golden.py which snapshots own output"
+   }
+  ],
+  "impact_on_screened_person": "Candidates are scored with an unvalidated number; no one can show the score predicts anything.",
+  "fixability": "code",
+  "fix": "Add scripts/validate.py that ingests a labelled CSV (text, criterion score), reports Pearson/Spearman r, MAE, CI coverage, per-language; fail CI if below thresholds.",
+  "acceptance_test": "test_validation_harness_reports_correlation_and_ci_coverage",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-002",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "Per-metric explanation of why a score came out as it did",
+  "claim": "The report gives a composite VFS but no contribution breakdown tying weighted components to the final number or to what would change it.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 37,
+    "excerpt": "lexical[\"score\"] * 0.35"
+   },
+   {
+    "file": "mcp-server/tools/reporter.py",
+    "line": 38,
+    "excerpt": "\"metrics\": {"
+   }
+  ],
+  "impact_on_screened_person": "A rejected candidate cannot learn which factor drove the outcome, and reviewers cannot challenge it.",
+  "fixability": "code",
+  "fix": "Add a 'contributions' block (weight x score per metric, rank, sensitivity) to compute_verbal_fluency_score and render it in the report.",
+  "acceptance_test": "test_vfs_result_includes_weighted_contributions_summing_to_vfs",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-003",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "Human-review workflow gate before any decision use",
+  "claim": "Nothing forces a human reviewer to sign off; the output is directly consumable as a decision.",
+  "evidence": [
+   {
+    "file": "mcp-server/server.py",
+    "line": 120,
+    "excerpt": "def tool_generate_report("
+   },
+   {
+    "file": "mcp-server/",
+    "line": 0,
+    "excerpt": "ABSENT: no review state, reviewer identity or sign-off record"
+   }
+  ],
+  "impact_on_screened_person": "Automated scores can become de-facto decisions with no accountable human.",
+  "fixability": "code",
+  "fix": "Add review record (reviewer, decision, rationale, timestamp) and mark reports 'UNREVIEWED - not for decision use' until signed off.",
+  "acceptance_test": "test_report_marked_unreviewed_until_reviewer_signoff",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-004",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "Score appeal and contestation path",
+  "claim": "There is no mechanism for a screened person to contest a score or request rescoring with human review.",
+  "evidence": [
+   {
+    "file": "README.md",
+    "line": 902,
+    "excerpt": "**Do not use for consequential decisions.** These estimates must not be used for hiring, clinical assessment, academic evaluation, or legal proceedings."
+   },
+   {
+    "file": "mcp-server/",
+    "line": 0,
+    "excerpt": "ABSENT: no appeal, dispute or re-score API"
+   }
+  ],
+  "impact_on_screened_person": "A person harmed by a wrong score has no recourse, a legal exposure under automated-decision rules.",
+  "fixability": "process",
+  "fix": "Write an appeal procedure (intake, SLA, independent reviewer, rescoring with alternate text) and a tool recording appeal status.",
+  "acceptance_test": "doc: docs/process/appeal-procedure.md exists and defines intake, SLA, independent reviewer and outcome records",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-005",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "Consent capture and purpose record before scoring",
+  "claim": "Text is scored with no recorded consent, purpose or notice to the author.",
+  "evidence": [
+   {
+    "file": "mcp-server/server.py",
+    "line": 32,
+    "excerpt": "def tool_preprocess_text(text: str, lang: str) -> str:"
+   },
+   {
+    "file": "mcp-server/",
+    "line": 0,
+    "excerpt": "ABSENT: no consent_id parameter or consent store"
+   }
+  ],
+  "impact_on_screened_person": "People can be profiled without knowing; violates notice/consent expectations under GDPR/UU PDP.",
+  "fixability": "code",
+  "fix": "Require a consent_id/purpose argument on the entry pipeline and refuse to score without it; store consent timestamp and text version.",
+  "acceptance_test": "test_pipeline_refuses_scoring_without_consent_record",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-006",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "API authentication for the MCP server",
+  "claim": "The server exposes all tools with no authentication or caller identity.",
+  "evidence": [
+   {
+    "file": "mcp-server/server.py",
+    "line": 22,
+    "excerpt": "mcp = FastMCP(\"verbal-fluency-mcp\")"
+   },
+   {
+    "file": "mcp-server/server.py",
+    "line": 156,
+    "excerpt": "mcp.run()"
+   }
+  ],
+  "impact_on_screened_person": "Anyone reaching the server can score people's text; no accountability trail for who ran what.",
+  "fixability": "code",
+  "fix": "Add token auth middleware for non-stdio transports and attach caller identity to every call.",
+  "acceptance_test": "test_server_rejects_unauthenticated_calls_when_http_transport",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-007",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Rate limiting and abuse throttling",
+  "claim": "No limits on call rate or payload size.",
+  "evidence": [
+   {
+    "file": "mcp-server/server.py",
+    "line": 52,
+    "excerpt": "def tool_analyze_semantic("
+   },
+   {
+    "file": "mcp-server/server.py",
+    "line": 0,
+    "excerpt": "ABSENT: no rate limit or max text length"
+   }
+  ],
+  "impact_on_screened_person": "Enables probing the scorer to gaming-optimise text and denial of service for other users.",
+  "fixability": "code",
+  "fix": "Add per-caller rate limit and max input size with explicit errors.",
+  "acceptance_test": "test_rate_limit_rejects_burst_over_threshold",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-008",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "Audit log export of every scoring decision",
+  "claim": "No immutable record of who scored what, with which version and inputs hash.",
+  "evidence": [
+   {
+    "file": "mcp-server/server.py",
+    "line": 120,
+    "excerpt": "def tool_generate_report("
+   },
+   {
+    "file": "mcp-server/",
+    "line": 0,
+    "excerpt": "ABSENT: no audit log writer or export"
+   }
+  ],
+  "impact_on_screened_person": "Screened persons and regulators cannot reconstruct how a decision was reached.",
+  "fixability": "code",
+  "fix": "Append-only JSONL audit log (timestamp, caller, input hash, tool versions, norms version, outputs) with export tool.",
+  "acceptance_test": "test_audit_log_records_hash_version_and_outputs_per_score",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-009",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "Versioned norms and model version stamped in every result",
+  "claim": "Norms are loaded from unversioned JSON and outputs carry no norms/algorithm version, so results cannot be reproduced after change.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 15,
+    "excerpt": "with open(os.path.join(_CONFIG_DIR, \"iq_norms.json\")) as f:"
+   },
+   {
+    "file": "mcp-server/config/iq_norms.json",
+    "line": 0,
+    "excerpt": "ABSENT: no version or effective_date field"
+   }
+  ],
+  "impact_on_screened_person": "A score from last year cannot be reproduced or compared; appeals cannot rerun the original logic.",
+  "fixability": "code",
+  "fix": "Add version/effective_date to norms files and algorithm version constant; include in all outputs and the golden fixtures.",
+  "acceptance_test": "test_every_result_includes_norms_and_algorithm_version",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-010",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "Fairness dashboard of score distributions by language and group",
+  "claim": "No tooling reports score distributions or impact ratios by language or any protected-proxy group.",
+  "evidence": [
+   {
+    "file": "scripts/pipeline.py",
+    "line": 21,
+    "excerpt": "def run_pipeline(text: str) -> dict:"
+   },
+   {
+    "file": "scripts/",
+    "line": 0,
+    "excerpt": "ABSENT: no group-level distribution or four-fifths report"
+   }
+  ],
+  "impact_on_screened_person": "Adverse impact against Indonesian speakers or ESL authors goes undetected.",
+  "fixability": "code",
+  "fix": "Add scripts/fairness_report.py computing mean/SD, pass-rate ratios per language and optional labelled group over a batch.",
+  "acceptance_test": "test_fairness_report_flags_impact_ratio_below_0_8",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-011",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Batch scoring with per-document results and error isolation",
+  "claim": "Only single-text scoring exists; reviewers must script loops and one bad input breaks the flow.",
+  "evidence": [
+   {
+    "file": "scripts/pipeline.py",
+    "line": 21,
+    "excerpt": "def run_pipeline(text: str) -> dict:"
+   },
+   {
+    "file": "mcp-server/server.py",
+    "line": 26,
+    "excerpt": "def tool_detect_language(text: str) -> str:"
+   }
+  ],
+  "impact_on_screened_person": "Manual loops invite inconsistent handling and copy-paste mistakes across candidates.",
+  "fixability": "code",
+  "fix": "Add tool_score_batch accepting a list of documents returning per-document result or structured error.",
+  "acceptance_test": "test_batch_scoring_isolates_failing_document",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-012",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "AI-generated text detection flag",
+  "claim": "Nothing flags text likely written by an LLM, whose fluency inflates VFS.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/lexical.py",
+    "line": 84,
+    "excerpt": "\"evidence\": evidence[:3],"
+   },
+   {
+    "file": "mcp-server/",
+    "line": 0,
+    "excerpt": "ABSENT: no AI-text or authorship-integrity signal"
+   }
+  ],
+  "impact_on_screened_person": "Candidates using LLMs get inflated scores over honest ones; or honest candidates are mis-judged.",
+  "fixability": "guardrail",
+  "fix": "Add an advisory heuristic flag (low-perplexity/uniformity) with explicit false-positive warning; never auto-penalise.",
+  "acceptance_test": "test_report_includes_ai_text_advisory_flag_without_changing_score",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-013",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Writing-improvement feedback for the screened person",
+  "claim": "Output is evaluative only; no actionable guidance for the author.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/reporter.py",
+    "line": 38,
+    "excerpt": "\"metrics\": {"
+   }
+  ],
+  "impact_on_screened_person": "Candidates get a verdict but no path to improve, which reduces perceived fairness.",
+  "fixability": "code",
+  "fix": "Add 'suggestions' section from weakest metrics with sentence-level examples (repetition, long sentences).",
+  "acceptance_test": "test_report_suggestions_target_weakest_metric",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-014",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Language expansion beyond English and Indonesian",
+  "claim": "Unsupported languages are silently coerced to English.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/preprocess.py",
+    "line": 61,
+    "excerpt": "if lang not in (\"en\", \"id\"):"
+   },
+   {
+    "file": "mcp-server/tools/preprocess.py",
+    "line": 62,
+    "excerpt": "lang = \"en\""
+   }
+  ],
+  "impact_on_screened_person": "Text in other languages is scored against English norms with no refusal.",
+  "fixability": "guardrail",
+  "fix": "Return UNSUPPORTED_LANGUAGE instead of defaulting to en; define a language-pack interface for adding new languages with norms.",
+  "acceptance_test": "test_unsupported_language_is_refused_not_coerced_to_english",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-015",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P1",
+  "title": "Refuse-to-score gate for insufficient or unsuitable text",
+  "claim": "Scoring proceeds with only a confidence label even at under 30 words.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 44,
+    "excerpt": "if word_count < 30:"
+   },
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 45,
+    "excerpt": "confidence, label = 0.30, \"VERY LOW\""
+   }
+  ],
+  "impact_on_screened_person": "Tiny samples still yield an IQ and CI that downstream users treat as real.",
+  "fixability": "guardrail",
+  "fix": "Return status INSUFFICIENT_TEXT with no IQ output below a configurable minimum word count.",
+  "acceptance_test": "test_pipeline_withholds_iq_below_minimum_words",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-016",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Multi-sample aggregation for the same person",
+  "claim": "Each text is scored independently; no way to combine several samples to raise reliability.",
+  "evidence": [
+   {
+    "file": "scripts/pipeline.py",
+    "line": 21,
+    "excerpt": "def run_pipeline(text: str) -> dict:"
+   }
+  ],
+  "impact_on_screened_person": "Single-sample scores are noisy; one bad writing day determines the outcome.",
+  "fixability": "code",
+  "fix": "Add aggregate_samples(person_id, results) returning pooled VFS with narrower, honest CI and between-sample variance.",
+  "acceptance_test": "test_aggregate_samples_reports_between_sample_variance",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-017",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Retention and deletion controls for submitted text",
+  "claim": "No deletion or retention policy for candidate text and results.",
+  "evidence": [
+   {
+    "file": "README.md",
+    "line": 904,
+    "excerpt": "**Privacy.** Text submitted to the MCP server is processed locally. No data is sent to external services beyond the embedding model (downloaded locally on first use)."
+   },
+   {
+    "file": "mcp-server/",
+    "line": 0,
+    "excerpt": "ABSENT: no purge or retention setting"
+   }
+  ],
+  "impact_on_screened_person": "Candidates cannot exercise erasure; stored text accumulates indefinitely.",
+  "fixability": "process",
+  "fix": "Define retention schedule and a purge tool; document in a DPIA.",
+  "acceptance_test": "doc: docs/process/retention-and-deletion.md exists and states retention period and purge procedure",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-018",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Structured machine-readable output schema with versioning",
+  "claim": "Report JSON has no published schema, so integrators parse ad hoc.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/reporter.py",
+    "line": 32,
+    "excerpt": "full_json = {"
+   },
+   {
+    "file": "docs/",
+    "line": 0,
+    "excerpt": "ABSENT: no output JSON schema"
+   }
+  ],
+  "impact_on_screened_person": "Integrators mis-parse fields (e.g. N/A strings), causing wrong decisions downstream.",
+  "fixability": "code",
+  "fix": "Publish JSON Schema for the report and validate output against it in tests.",
+  "acceptance_test": "test_report_json_validates_against_published_schema",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-019",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Confidence interval that reflects real measurement error",
+  "claim": "CI width depends only on text-length tier, not per-metric variance or validation error.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 80,
+    "excerpt": "ci_half = round(15 - confidence * 10)"
+   }
+  ],
+  "impact_on_screened_person": "Narrow CIs overstate precision for the person being judged.",
+  "fixability": "code",
+  "fix": "Compute CI from empirical residuals from the validation harness and bootstrapped metric variance.",
+  "acceptance_test": "test_ci_width_derives_from_validation_residuals",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-020",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Reviewer-facing evidence view with sentence citations",
+  "claim": "Evidence is capped at three items per metric.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/lexical.py",
+    "line": 84,
+    "excerpt": "\"evidence\": evidence[:3],"
+   }
+  ],
+  "impact_on_screened_person": "Reviewers cannot see why the score was reached beyond a few cherry-picked sentences.",
+  "fixability": "code",
+  "fix": "Add a verbose evidence mode returning all contributing sentences with their metric effect.",
+  "acceptance_test": "test_verbose_evidence_returns_all_contributing_sentences",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-021",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Reproducible run manifest with dependency and model hashes",
+  "claim": "Results depend on unpinned spaCy models and libraries with no manifest recorded.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/preprocess.py",
+    "line": 16,
+    "excerpt": "model = \"en_core_web_sm\" if lang == \"en\" else \"xx_ent_wiki_sm\""
+   }
+  ],
+  "impact_on_screened_person": "The same text may score differently after an upgrade and nobody can tell why.",
+  "fixability": "code",
+  "fix": "Emit a manifest (library and spaCy model versions) with each result.",
+  "acceptance_test": "test_result_includes_dependency_manifest",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-022",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P2",
+  "title": "Accommodation mode for non-native writers and disabilities",
+  "claim": "No option to adjust interpretation for ESL authors, dyslexia or assistive tools.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 37,
+    "excerpt": "lexical[\"score\"] * 0.35"
+   },
+   {
+    "file": "mcp-server/",
+    "line": 0,
+    "excerpt": "ABSENT: no accommodation flag"
+   }
+  ],
+  "impact_on_screened_person": "Protected groups get systematically lower scores without any adjustment path.",
+  "fixability": "guardrail",
+  "fix": "Add accommodation flag that suppresses IQ/edu mapping and requires human review.",
+  "acceptance_test": "test_accommodation_flag_suppresses_iq_mapping",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-023",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P3",
+  "title": "Dry-run / what-if comparison between norm versions",
+  "claim": "Cannot see how a candidate's score would change under revised norms.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 15,
+    "excerpt": "with open(os.path.join(_CONFIG_DIR, \"iq_norms.json\")) as f:"
+   }
+  ],
+  "impact_on_screened_person": "Norm changes silently alter outcomes with no impact analysis.",
+  "fixability": "code",
+  "fix": "Add compare_norms(text, version_a, version_b) tool.",
+  "acceptance_test": "test_compare_norms_reports_score_delta",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-024",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P3",
+  "title": "Interpretation guide embedded in every report for non-technical reviewers",
+  "claim": "Disclaimers are optional and appear only with a verbose flag.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/reporter.py",
+    "line": 265,
+    "excerpt": "if verbose_caveats or format_flag == \"--verbose-caveats\":"
+   }
+  ],
+  "impact_on_screened_person": "HR reviewers may never see the limitations that apply to the score.",
+  "fixability": "code",
+  "fix": "Always include a short mandatory limitations block in the report and scores-only output.",
+  "acceptance_test": "test_scores_only_output_includes_limitations_notice",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "N-025",
+  "category": "feature",
+  "persona": "ceo",
+  "severity": "P3",
+  "title": "Configurable decision-use policy flag (screening vs. practice mode)",
+  "claim": "No distinction between self-assessment use and employer/admissions use.",
+  "evidence": [
+   {
+    "file": "README.md",
+    "line": 902,
+    "excerpt": "**Do not use for consequential decisions.** These estimates must not be used for hiring, clinical assessment, academic evaluation, or legal proceedings."
+   },
+   {
+    "file": "mcp-server/",
+    "line": 0,
+    "excerpt": "ABSENT: no use-mode parameter"
+   }
+  ],
+  "impact_on_screened_person": "The README forbids hiring use while the product is marketed for it, so behaviour is not enforced.",
+  "fixability": "guardrail",
+  "fix": "Add use_mode parameter; screening mode requires consent, review and validation evidence to be present.",
+  "acceptance_test": "test_screening_mode_requires_consent_and_review_records",
+  "phase": 5,
+  "status": "open",
+  "depends_on": []
+ }
+]

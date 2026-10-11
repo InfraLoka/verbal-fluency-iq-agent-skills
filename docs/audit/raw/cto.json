@@ -1,0 +1,576 @@
+[
+ {
+  "id": "X-001",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P1",
+  "title": "IQ band lookup falls through to 'Low' for VFS in the gaps between bands (e.g. 84.995)",
+  "claim": "Bands use vfs_max 84.99/69.99/54.99 against next band vfs_min 85/70/55; any VFS with 3+ decimals in the gap matches no band and the loop fallback is bands[-1] ('Low'). Verified: predict_iq(84.995,0.8) and predict_iq(69.995,0.8) both return classification 'Low'. VFS is rounded to 1 decimal in the pipeline, but the MCP tool tool_predict_iq accepts any float.",
+  "evidence": [
+   {
+    "file": "mcp-server/config/iq_norms.json",
+    "line": 10,
+    "excerpt": "\"vfs_min\": 70, \"vfs_max\": 84.99,"
+   },
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 70,
+    "excerpt": "band = norms[\"bands\"][-1]"
+   }
+  ],
+  "impact_on_screened_person": "A person scoring just under a band boundary is silently classified in the lowest band, a gross misclassification with no error.",
+  "fixability": "code",
+  "fix": "Use half-open intervals (vfs_min <= vfs < next min) with the top band closed, and raise on out-of-range input instead of defaulting to the last band.",
+  "acceptance_test": "test_predict_iq_gap_values_map_to_adjacent_band",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-002",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P1",
+  "title": "predict_iq accepts out-of-range VFS and confidence: percentile 354, negative percentile, inverted CI",
+  "claim": "No validation of vfs (0-100) or confidence (0-1). Verified: predict_iq(150,.8) -> percentile 354; predict_iq(-5,.8) -> percentile -11, class 'Low'; predict_iq(50,5) -> ci_low 119 > ci_high 49. tool_predict_iq exposes this directly over MCP.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 80,
+    "excerpt": "ci_half = round(15 - confidence * 10)"
+   },
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 81,
+    "excerpt": "percentile = round("
+   }
+  ],
+  "impact_on_screened_person": "Impossible scores (percentile 354, inverted CI) can be returned and attached to a person's record.",
+  "fixability": "code",
+  "fix": "Validate ranges at the tool boundary and in mapper functions; raise ValueError with a clear message; clamp percentile to 1-99.",
+  "acceptance_test": "test_predict_iq_rejects_out_of_range_inputs",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-003",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P1",
+  "title": "server.py cannot import under the installed mcp 2.x; fastmcp unpinned and the MCP layer is untested",
+  "claim": "server.py imports mcp.server.fastmcp, but requirements.txt has unpinned fastmcp>=0.4.0 and the venv resolved mcp 2.3.0 where that module no longer exists, so importing server raises ModuleNotFoundError. No test imports server.py, so CI never catches it; the shipped product entry point is unverified.",
+  "evidence": [
+   {
+    "file": "mcp-server/server.py",
+    "line": 8,
+    "excerpt": "from mcp.server.fastmcp import FastMCP"
+   },
+   {
+    "file": "requirements.txt",
+    "line": 1,
+    "excerpt": "fastmcp>=0.4.0"
+   }
+  ],
+  "impact_on_screened_person": "The tool cannot be started by consumers, and screening workflows fail or fall back to ad-hoc unaudited paths.",
+  "fixability": "code",
+  "fix": "Pin mcp/fastmcp to a tested range, add tests/test_server.py that imports server and calls every tool, and lock dependencies.",
+  "acceptance_test": "test_server_module_imports_and_registers_all_tools",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-004",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P1",
+  "title": "Dependencies unpinned and no lockfile: scores can change with upstream upgrades",
+  "claim": "requirements.txt and requirements-dev.txt use >= floors only (spacy, sentence-transformers, textstat, lexicalrichness, sklearn, numpy, ruff). Golden scores in tests/fixtures depend on exact library behaviour; a textstat or spaCy upgrade silently shifts a person's IQ estimate. No pyproject, constraints or hashes.",
+  "evidence": [
+   {
+    "file": "requirements.txt",
+    "line": 5,
+    "excerpt": "sentence-transformers>=2.6.0"
+   },
+   {
+    "file": "requirements-dev.txt",
+    "line": 1,
+    "excerpt": "ruff>=0.4.0"
+   }
+  ],
+  "impact_on_screened_person": "The same text may yield a different score and classification after a routine install, with no record of why.",
+  "fixability": "code",
+  "fix": "Pin exact versions (pip-compile lockfile), run CI against the lock, and record dependency and model versions in every report.",
+  "acceptance_test": "test_requirements_are_pinned_with_exact_versions",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-005",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P1",
+  "title": "Scores carry no model/norm/version provenance for reproducibility or audit",
+  "claim": "Output JSON has no score_version, norm file hash, spaCy/sentence-transformer model version, or tool version. Norm files (iq_norms.json) have no version field. A stored score cannot be tied to the algorithm that produced it, and changing norms invalidates history invisibly.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 85,
+    "excerpt": "return {"
+   },
+   {
+    "file": "mcp-server/config/iq_norms.json",
+    "line": 0,
+    "excerpt": "absence: no version/hash field in norms file"
+   }
+  ],
+  "impact_on_screened_person": "A contested decision cannot be reproduced or defended since the producing algorithm version is unknown.",
+  "fixability": "code",
+  "fix": "Add scoring_version, norms_sha256 and model identifiers to vfs/iq/report outputs; bump on any weight or norm change.",
+  "acceptance_test": "test_report_includes_scoring_and_norms_version",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-006",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P1",
+  "title": "Empty or non-alphabetic input crashes the pipeline with KeyError",
+  "claim": "analyze_lexical returns {'score':0.0,'error':...} without lexical_density when no alphabetic tokens exist; run_pipeline then indexes lex['lexical_density']. Verified: run_pipeline('12345 6789 !!!') and run_pipeline('') raise KeyError 'lexical_density'. Over MCP the same shape feeds estimate_education_level and the reporter.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/lexical.py",
+    "line": 21,
+    "excerpt": "return {\"score\": 0.0, \"error\": \"No alphabetic tokens found\"}"
+   },
+   {
+    "file": "scripts/pipeline.py",
+    "line": 31,
+    "excerpt": "read[\"gunning_fog\"], read[\"ari\"], lex[\"lexical_density\"], syn[\"clause_density\"]"
+   }
+  ],
+  "impact_on_screened_person": "Unusable submissions crash instead of being rejected as insufficient input; an error dict with score 0.0 could be read as a real zero.",
+  "fixability": "code",
+  "fix": "Return a typed InsufficientText result (score None) and make downstream tools refuse to score; add a minimum-words gate.",
+  "acceptance_test": "test_pipeline_rejects_empty_or_nonalpha_text",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-007",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P1",
+  "title": "A score of 0.0 is emitted on failure, and short text yields a fabricated 50.0 semantic score",
+  "claim": "Failure paths return numeric scores (lexical 0.0 on error; semantic 50.0 for <2 sentences) that are then blended into VFS with full weight and only a confidence label, so a missing metric becomes a plausible number.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/semantic.py",
+    "line": 52,
+    "excerpt": "\"score\": 50.0,"
+   },
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 37,
+    "excerpt": "lexical[\"score\"] * 0.35"
+   }
+  ],
+  "impact_on_screened_person": "A person with one long sentence receives a neutral 50 on 25% of their score instead of an explicit 'not measurable'.",
+  "fixability": "guardrail",
+  "fix": "Return score None with reason; VFS must renormalise weights or refuse to produce an IQ when a component is unmeasurable.",
+  "acceptance_test": "test_vfs_refuses_when_component_unmeasurable",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-008",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "Malformed JSON args raise uncaught JSONDecodeError across MCP tools (incl. segment_boundaries_json)",
+  "claim": "Every tool calls json.loads on caller strings with no try/except or schema check; tool_analyze_semantic does so for segment_boundaries_json. Verified pattern: bad JSON propagates as a raw exception; wrong shapes (missing 'idx'/'text') raise KeyError.",
+  "evidence": [
+   {
+    "file": "mcp-server/server.py",
+    "line": 61,
+    "excerpt": "json.loads(segment_boundaries_json) if segment_boundaries_json else None"
+   },
+   {
+    "file": "mcp-server/server.py",
+    "line": 41,
+    "excerpt": "analyze_lexical(json.loads(tokens_json), json.loads(sentences_json), lang)"
+   }
+  ],
+  "impact_on_screened_person": "Tool failures are opaque; callers may retry with defaults or skip metrics, producing a score on partial data.",
+  "fixability": "code",
+  "fix": "Add a _parse_json helper returning structured {error, field} responses and validate shapes with pydantic or jsonschema.",
+  "acceptance_test": "test_tools_return_structured_error_on_malformed_json",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-009",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "MCP tools inconsistent on language and input validation (lang not validated outside preprocess)",
+  "claim": "Only preprocess_text validates lang. tool_analyze_* accept any lang string; unknown values silently use the English path (syntactic/readability) and tool_detect_language coerces every non-en/id language (e.g. French, Javanese) to 'en' with confidence 0.50 rather than rejecting.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/preprocess.py",
+    "line": 61,
+    "excerpt": "if lang not in (\"en\", \"id\"):"
+   },
+   {
+    "file": "mcp-server/tools/preprocess.py",
+    "line": 70,
+    "excerpt": "raise ValueError(f\"Unsupported language: {lang!r}. Must be 'en' or 'id'.\")"
+   }
+  ],
+  "impact_on_screened_person": "Non-English/Indonesian writers are scored against English norms as if they were English.",
+  "fixability": "guardrail",
+  "fix": "Return lang 'unsupported' and refuse scoring; validate lang in every tool via a shared enum.",
+  "acceptance_test": "test_unsupported_language_is_refused_not_coerced_to_english",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-010",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "No input size limit: 1M-character text crashes spaCy; large inputs are unbounded in memory/time",
+  "claim": "preprocess_text passes the whole cleaned text to nlp(). Verified: 1.25M chars raises ValueError E088. No max length on any MCP tool; semantic encodes every sentence at once and the O(n) per-sentence spaCy calls in syntactic are uncapped. Denial-of-service on a shared server.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/preprocess.py",
+    "line": 85,
+    "excerpt": "doc = nlp(cleaned)"
+   },
+   {
+    "file": "mcp-server/tools/semantic.py",
+    "line": 61,
+    "excerpt": "embeddings = model.encode(texts)"
+   }
+  ],
+  "impact_on_screened_person": "Large corpora (multi-file candidates) error out or hang rather than get a bounded, documented treatment.",
+  "fixability": "code",
+  "fix": "Enforce MAX_CHARS with a clear error, chunk long texts, batch_size on encode, and test the limit.",
+  "acceptance_test": "test_preprocess_rejects_text_over_max_chars_with_clear_error",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-011",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "Per-sentence nlp() calls and quadratic-ish loops in syntactic/semantic hurt long-text performance",
+  "claim": "syntactic calls nlp(sent_data['text']) once per sentence instead of nlp.pipe; semantic calls cosine_similarity per adjacent pair in a Python loop; Sastrawi StemmerFactory().create_stemmer() is rebuilt on every analyze_lexical call (slow dictionary load).",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/syntactic.py",
+    "line": 200,
+    "excerpt": "doc = nlp(sent_data[\"text\"])"
+   },
+   {
+    "file": "mcp-server/tools/lexical.py",
+    "line": 29,
+    "excerpt": "stemmer = StemmerFactory().create_stemmer()"
+   }
+  ],
+  "impact_on_screened_person": "Slow turnaround at scale pushes operators toward truncating text, which changes scores.",
+  "fixability": "code",
+  "fix": "Use nlp.pipe, cache the stemmer at module level, vectorise adjacent similarities with a row-wise dot product.",
+  "acceptance_test": "test_lexical_reuses_cached_stemmer",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-012",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "Model loading is unguarded: duplicate spaCy caches, no thread safety, no friendly error when models are missing",
+  "claim": "_get_nlp is duplicated in preprocess.py, syntactic.py and semantic.py with separate caches (the same model loaded up to 3 times). spacy.load/SentenceTransformer raise raw OSError/network errors if the model is absent; SentenceTransformer downloads from Hugging Face at first call at request time. No lock around the check-then-set.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/semantic.py",
+    "line": 19,
+    "excerpt": "_model_cache[\"model\"] = SentenceTransformer("
+   },
+   {
+    "file": "mcp-server/tools/syntactic.py",
+    "line": 97,
+    "excerpt": "_nlp_cache[lang] = spacy.load(model)"
+   }
+  ],
+  "impact_on_screened_person": "First request hangs or fails; a different pipeline config in each module can make scores differ from preprocessing.",
+  "fixability": "code",
+  "fix": "Centralise model loading in one module with a lock, preload at startup, pin model revisions, and fail with an actionable message.",
+  "acceptance_test": "test_models_loaded_once_via_shared_loader",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-013",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "Non-determinism not controlled for model inference; only langdetect seeded",
+  "claim": "DetectorFactory.seed=42 is the only seeding. langdetect/langid disagreement paths and sentence-transformers/numpy have no pinned revision or deterministic flag; golden tests tolerate nothing but depend on one machine's float output. The model name has no revision hash.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/preprocess.py",
+    "line": 9,
+    "excerpt": "DetectorFactory.seed = 42"
+   },
+   {
+    "file": "mcp-server/tools/semantic.py",
+    "line": 19,
+    "excerpt": "SentenceTransformer("
+   }
+  ],
+  "impact_on_screened_person": "A rerun on another machine may yield a different classification for the same person.",
+  "fixability": "code",
+  "fix": "Pin model revision, add cross-platform tolerance bounds in golden tests, and document determinism guarantees.",
+  "acceptance_test": "test_semantic_scores_stable_across_repeated_runs",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-014",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "Reporter hardcodes 'N/A (no parser for id)' for any None dependency depth",
+  "claim": "The report prints 'no parser for id' whenever dependency_depth is None regardless of language, so a future None for EN would be mislabelled; the reason string lives in the reporter rather than the metric result.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/reporter.py",
+    "line": 152,
+    "excerpt": "f\"  Dependency tree depth : {_dep_depth if _dep_depth is not None else 'N/A (no parser for id)'}\""
+   }
+  ],
+  "impact_on_screened_person": "Misleading explanation for why a metric is missing weakens transparency to the screened person.",
+  "fixability": "code",
+  "fix": "Carry a not_measured_reason field from the analyzer and render it.",
+  "acceptance_test": "test_report_depth_na_reason_comes_from_analyzer",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-015",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "Reporter indexes result dicts directly (KeyError on error/partial results) and 'Generated' date breaks determinism",
+  "claim": "generate_report subscripts lexical_result['mattr'], semantic_result['argument_coherence'] etc. with no .get; an error-dict from analyze_lexical, or a None coherence from short text, either crashes or prints 'None'. date.today() is embedded, so reports are not byte-reproducible.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/reporter.py",
+    "line": 135,
+    "excerpt": "line(f\"  MATTR (window=50)     : {lexical_result['mattr']}\")"
+   },
+   {
+    "file": "mcp-server/tools/reporter.py",
+    "line": 71,
+    "excerpt": "Generated: {date.today().isoformat()}"
+   }
+  ],
+  "impact_on_screened_person": "Reports for borderline submissions fail or show 'None' values to the reader.",
+  "fixability": "code",
+  "fix": "Render 'not measured' for None/missing metrics and accept an injectable report date.",
+  "acceptance_test": "test_report_handles_missing_metrics_without_keyerror",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-016",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "Mental age and CI accept impossible chronological ages and confidence",
+  "claim": "predict_mental_age accepts any age (verified -5 -> -5.0, 500 -> 500.0); the ratio formula is applied to adults. tool_predict_mental_age maps 0 and negatives to the default 30 silently.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 98,
+    "excerpt": "assumed = chronological_age is None"
+   },
+   {
+    "file": "mcp-server/server.py",
+    "line": 105,
+    "excerpt": "age = chronological_age if chronological_age > 0 else None"
+   }
+  ],
+  "impact_on_screened_person": "A mistyped or negative age yields nonsense or a silently assumed age 30 feeding an 'age' conclusion.",
+  "fixability": "code",
+  "fix": "Validate 3<=age<=120 and error otherwise; never silently substitute.",
+  "acceptance_test": "test_predict_mental_age_rejects_invalid_age",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-017",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "No logging or observability anywhere in the server",
+  "claim": "No logging import or audit trail in mcp-server. Failed analyses, language-coercion decisions, model loads and exceptions are not recorded; a score cannot be traced to input hash, version and timestamp.",
+  "evidence": [
+   {
+    "file": "mcp-server/server.py",
+    "line": 0,
+    "excerpt": "absence: no logging/audit calls in server.py or tools/*.py"
+   }
+  ],
+  "impact_on_screened_person": "No accountability record exists to investigate or contest an individual's score.",
+  "fixability": "code",
+  "fix": "Add structured logging with input hash, versions, lang decision and warnings (no raw text).",
+  "acceptance_test": "test_server_logs_audit_record_without_raw_text",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-018",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "CI: ruff unpinned (0.17 reports lint errors), spaCy models and sentence-transformer weights not cached, ruff ignores scripts/",
+  "claim": "ci.yml installs requirements-dev with ruff>=0.4.0 (venv has 0.17.0 which fails lint), downloads spaCy models on every run, caches ~/.cache/huggingface but the key does not include the model name, lints only mcp-server/ and tests/ (not scripts/), and runs mypy with --ignore-missing-imports.",
+  "evidence": [
+   {
+    "file": ".github/workflows/ci.yml",
+    "line": 30,
+    "excerpt": "run: ruff check mcp-server/ tests/"
+   },
+   {
+    "file": ".github/workflows/ci.yml",
+    "line": 83,
+    "excerpt": "python -m spacy download en_core_web_sm"
+   }
+  ],
+  "impact_on_screened_person": "A red or flaky CI lets unreviewed scoring changes land or blocks urgent corrections.",
+  "fixability": "code",
+  "fix": "Pin ruff, cache spaCy models, extend lint to scripts/, add a python-version matrix and coverage gate.",
+  "acceptance_test": "test_ci_workflow_pins_tooling_and_lints_scripts",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-019",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "CI uses Python 3.14 only and test job never runs on a pinned/lock environment; no coverage or server smoke test",
+  "claim": "All jobs set python-version '3.14' (no matrix, no pinned minor) with unpinned deps; the test step is plain pytest with no coverage threshold and no test that imports server.py or exercises tool_* wrappers.",
+  "evidence": [
+   {
+    "file": ".github/workflows/ci.yml",
+    "line": 17,
+    "excerpt": "python-version: \"3.14\""
+   },
+   {
+    "file": ".github/workflows/ci.yml",
+    "line": 87,
+    "excerpt": "run: pytest tests/ -v"
+   }
+  ],
+  "impact_on_screened_person": "Regressions in the MCP contract ship unnoticed.",
+  "fixability": "code",
+  "fix": "Add pytest-cov with a threshold and a tests/test_server.py wrapper contract test.",
+  "acceptance_test": "test_every_registered_tool_has_wrapper_contract_test",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-020",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P2",
+  "title": "Golden fixtures only cover three tracked example people and encode current (possibly wrong) outputs",
+  "claim": "tests/fixtures/golden_scores.json records outputs of the current algorithm as ground truth with no tolerance semantics, no EN case beyond examples, no short-text, mixed-language or adversarial fixtures. Weight changes require regenerating blindly via capture_golden.",
+  "evidence": [
+   {
+    "file": "tests/fixtures/golden_scores.json",
+    "line": 2,
+    "excerpt": "\"example/aqilah/source/1.md\": {"
+   },
+   {
+    "file": "tests/test_golden.py",
+    "line": 0,
+    "excerpt": "absence: no short-text, mixed-language, or empty-input golden cases"
+   }
+  ],
+  "impact_on_screened_person": "Baseline tests lock in current behaviour instead of validating it, so errors become 'expected'.",
+  "fixability": "code",
+  "fix": "Add edge-case fixtures and a documented golden-update review process.",
+  "acceptance_test": "test_golden_includes_short_mixed_and_empty_cases",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-021",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P3",
+  "title": "Typing is weak: bare dict returns, no TypedDict/pydantic result models across tool boundaries",
+  "claim": "Tool functions return dict and accept dict with string-keyed access; mypy with --ignore-missing-imports cannot catch key typos like lex['lexical_density'] vs error shape.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 28,
+    "excerpt": "def compute_verbal_fluency_score("
+   }
+  ],
+  "impact_on_screened_person": "Contract drift between tools causes runtime errors that affect screened inputs.",
+  "fixability": "code",
+  "fix": "Define TypedDict/pydantic models for every tool result and enable mypy strict on tools/.",
+  "acceptance_test": "test_tool_results_validate_against_result_models",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ },
+ {
+  "id": "X-022",
+  "category": "gap",
+  "persona": "cto",
+  "severity": "P3",
+  "title": "Config norms/edu files are loaded without schema validation; broken JSON or missing key crashes at first call",
+  "claim": "_load_iq_norms/_load_edu_norms json.load with no schema/overlap/gap check (the 84.99-85 gap exists because nothing validates coverage), cached globally with no reload.",
+  "evidence": [
+   {
+    "file": "mcp-server/tools/mapper.py",
+    "line": 15,
+    "excerpt": "with open(os.path.join(_CONFIG_DIR, \"iq_norms.json\")) as f:"
+   }
+  ],
+  "impact_on_screened_person": "Bad norm edits silently misclassify people.",
+  "fixability": "code",
+  "fix": "Validate norm files against a JSON schema (contiguous bands, monotonic) at load and in a test.",
+  "acceptance_test": "test_norms_config_bands_are_contiguous_and_valid",
+  "phase": 3,
+  "status": "open",
+  "depends_on": []
+ }
+]
