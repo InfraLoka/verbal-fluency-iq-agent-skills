@@ -1,0 +1,13 @@
+Sebelum memasang aplikasi kasir di komputer toko, pastikan komputer tersebut memiliki ruang penyimpanan kosong minimal dua gigabita dan tersambung ke jaringan internet yang stabil. Periksa juga tanggal dan jam pada komputer, karena transaksi yang tercatat dengan waktu yang salah akan menyulitkan proses pembukuan.
+
+Langkah pertama adalah mengunduh berkas pemasangan dari portal resmi perusahaan. Pilih versi yang sesuai dengan sistem operasi komputer Anda. Jangan menggunakan berkas yang dikirim melalui pesan pribadi atau disalin dari komputer lain, karena berkas tersebut mungkin sudah usang atau telah diubah.
+
+Langkah kedua adalah menjalankan berkas pemasangan dengan hak akses administrator. Aplikasi akan meminta kode toko dan kata sandi awal. Kode toko dapat dilihat pada halaman pengaturan di dasbor pusat. Setiap kode hanya dapat digunakan satu kali dan akan kedaluwarsa dalam waktu dua puluh empat jam.
+
+Langkah ketiga adalah menghubungkan printer struk dan laci uang. Sambungkan kabel printer ke komputer, kemudian pilih jenis printer pada menu perangkat. Lakukan cetak percobaan untuk memastikan bahwa ukuran kertas dan posisi tulisan sudah benar. Jika hasil cetakan terpotong, ubah pengaturan lebar kertas sebelum mencoba lagi.
+
+Langkah keempat adalah memasukkan daftar barang. Anda dapat mengetik data satu per satu atau mengimpor berkas lembar kerja yang disediakan oleh kantor pusat. Setelah data dimasukkan, periksa kembali harga dan stok beberapa barang secara acak.
+
+Terakhir, lakukan transaksi percobaan dan batalkan transaksi tersebut. Catat tanggal percobaan di buku pemeliharaan. Apabila salah satu langkah gagal, simpan berkas catatan aplikasi dan hubungi tim dukungan teknis sebelum melakukan perubahan lain.
+
+Sebagai tambahan, buatlah salinan cadangan data penjualan setiap akhir pekan. Simpan salinan tersebut di media penyimpanan terpisah yang tidak selalu tersambung ke komputer kasir. Dengan cara ini, data toko tetap aman apabila komputer rusak atau terserang perangkat lunak berbahaya.

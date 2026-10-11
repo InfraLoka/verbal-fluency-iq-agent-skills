@@ -1,6 +1,8 @@
 # Verbal Fluency IQ
 
-Predict IQ, mental age, and education level from text passages using verbal fluency as a psycholinguistic proxy. Supports **English** and **Indonesian**. Works on any text type: essays, social media posts, chat logs, transcripts.
+Measures the **lexical-syntactic complexity** of a text passage: vocabulary diversity, content-word density, clause structure, adjacent-sentence similarity and readability. Supports **English** and **Indonesian**.
+
+**What it is not.** The tool does not measure verbal fluency (the psychological construct of word-generation rate) and it is not an intelligence test. Its style index rewards complexity, not quality: longer words, longer sentences, rarer words and more subordination all raise it, while correctness, relevance and argument quality are not measured. An experimental IQ mapping exists but is withheld unless a validation study has passed for that language (see `docs/validation/validation-protocol.md`); in the shipped configuration it is withheld for every language.
 
 **Tool-first design:** all scores are computed by deterministic MCP tools. The AI orchestrates the pipeline but never estimates scores by reasoning alone.
 
@@ -12,36 +14,37 @@ Predict IQ, mental age, and education level from text passages using verbal flue
 - [Architecture](#architecture)
 - [Installation](#installation)
 - [Quick Start](#quick-start)
-- [The 11 MCP Tools](#the-11-mcp-tools)
+- [The 12 MCP Tools](#the-12-mcp-tools)
 - [Scoring Formulas](#scoring-formulas)
-- [IQ & Education Mapping](#iq--education-mapping)
+- [Style Bands, Experimental IQ & Text Complexity](#style-bands-experimental-iq--text-complexity)
 - [Output Flags](#output-flags)
 - [Vendorless `.agent/` Usage](#vendorless-agent-usage)
 - [Configuration Reference](#configuration-reference)
 - [Sample Report](#sample-report)
 - [Limitations & Ethics](#limitations--ethics)
-- [Research Basis](#research-basis)
+- [Inspired By](#inspired-by)
 
 ---
 
 ## Overview
 
-Verbal fluency — the richness, complexity, and coherence of written language — correlates with cognitive ability measures. This project formalises that relationship into a deterministic pipeline:
+Text complexity statistics correlate weakly, at group level, with many things: education, genre, editing, topic and first language among them. This project computes those statistics deterministically and reports them as a **writing-style index of lexical-syntactic complexity**, with every limitation attached:
 
 ```
 Raw text
-  → Language detection
-  → Preprocessing (tokenisation, sentence splitting)
-  → Lexical analysis    (vocabulary diversity, density)
-  → Syntactic analysis  (clause complexity, dependency depth)
-  → Semantic analysis   (coherence, topic drift, entity sophistication)
+  → Language detection (unsupported or code-switched text is refused)
+  → Preprocessing (tokenisation, sentence splitting, alphabetic word count)
+  → Validity gates (length, punctuation structure, provenance, text type, validation status)
+  → Lexical analysis    (MATTR, MTLD, content-word density, out-of-dictionary rate)
+  → Syntactic analysis  (clause complexity, dependency depth for English)
+  → Semantic analysis   (adjacent-sentence similarity, topic drift, lexical chains)
   → Readability indices (Fog, ARI, Coleman-Liau, Flesch)
-  → Verbal Fluency Score (VFS, 0–100)
-  → IQ point estimate + 95% CI
-  → Mental age
-  → Education level
-  → Structured report with sentence-level citation evidence
+  → Style index (0–100) + neutral style band
+  → Experimental IQ, mental age, text complexity band — each withheld unless its gate passes
+  → Structured report with status, reasons, provenance caveat and sentence-level evidence
 ```
+
+Every result carries a `status` (`OK`, `INSUFFICIENT_TEXT`, `UNSUPPORTED_LANGUAGE`, `MIXED_LANGUAGE`, `INSUFFICIENT_STRUCTURE`, `UNVERIFIED_PROVENANCE`, `UNVALIDATED`) and the `reasons` behind it. With the shipped `mcp-server/config/validation.json` no language is validated, so the best possible status is `UNVALIDATED` and no IQ is emitted.
 
 ---
 
@@ -52,22 +55,25 @@ Raw text
 ```
 verbal-fluency-iq/
 ├── mcp-server/
-│   ├── server.py              ← FastMCP entry point (11 @mcp.tool() handlers)
+│   ├── server.py              ← FastMCP entry point (12 @mcp.tool() handlers)
 │   ├── tools/
+│   │   ├── policy.py          ← Validity gates, statuses, cross-language guard
 │   │   ├── preprocess.py      ← Language detection + tokenisation
-│   │   ├── lexical.py         ← MATTR, VOCD-D, hapax ratio, lexical density
+│   │   ├── lexical.py         ← MATTR, MTLD, content-word density, OOV rate
 │   │   ├── syntactic.py       ← Clause density, subordination, dep depth
-│   │   ├── semantic.py        ← Sentence embeddings, coherence, entity types
+│   │   ├── semantic.py        ← Adjacent-sentence similarity, drift, chains
 │   │   ├── readability.py     ← Fog, ARI, Coleman-Liau, Flesch
-│   │   ├── mapper.py          ← VFS → IQ / mental age / education mapping
+│   │   ├── mapper.py          ← Style index, style band, gated IQ, complexity band
 │   │   └── reporter.py        ← Report assembly with citation evidence
 │   └── config/
-│       ├── iq_norms.json      ← VFS→IQ band table
-│       ├── edu_norms.json     ← Readability→education thresholds
+│       ├── validation.json    ← Validity policy (gates, per-language flags)
+│       ├── iq_norms.json      ← Style band table (uncalibrated)
+│       ├── edu_norms.json     ← Text complexity band thresholds
+│       ├── semantic_scaling.json ← Per-language similarity scaling
 │       └── id_syllables.json  ← Indonesian syllable counting rules
 ├── .agent/
 │   ├── SKILL.md               ← Vendorless skill definition (any AI agent)
-│   └── tools.json             ← JSON Schema for all 11 tools
+│   └── tools.json             ← JSON Schema for all 12 tools
 ├── tests/
 │   ├── test_preprocess.py
 │   ├── test_lexical.py
@@ -123,11 +129,12 @@ venv/bin/python -m pytest tests/ -v
 | `fastmcp>=0.4.0` | MCP server framework |
 | `spacy>=3.7.0` | Tokenisation, dependency parsing, NER |
 | `sentence-transformers>=2.6.0` | Sentence embeddings for semantic analysis |
-| `lexicalrichness>=0.4.2` | VOCD-D computation |
+| `lexicalrichness>=0.4.2` | MTLD and VOCD-D computation |
+| `wordfreq>=3.1.1` | Dictionary filter for misspellings (bundled en/id data) |
 | `textstat>=0.7.3` | Readability indices (EN) |
-| `langdetect>=1.0.9` | Language detection (primary) |
-| `langid>=1.1.6` | Language detection (secondary + confidence) |
-| `PySastrawi>=1.2.0` | Indonesian stemmer for MATTR normalisation |
+| `langdetect>=1.0.9` | Language detection (agreement check) |
+| `langid>=1.1.6` | Language detection (primary) and code-switching detection |
+| `PySastrawi>=1.2.0` | Indonesian root dictionary for passive and verb detection |
 | `scikit-learn>=1.4.0` | Cosine similarity for semantic coherence |
 | `numpy>=1.26.0` | Numerical operations |
 | `nltk>=3.8.1` | Tokenisation utilities |
@@ -163,7 +170,7 @@ Add to `.claude/mcp_config.json`:
 ### Invoke via Prompt
 
 ```
-Analyze this text for verbal fluency: "<paste text here>"
+Analyze the lexical-syntactic complexity of this text --provenance=supervised_unaided --text-type=formal_prose: "<paste text here>"
 ```
 
 Add flags to control output:
@@ -174,143 +181,161 @@ Analyze this text --report --age=25 --verbose-caveats: "<paste text here>"
 
 ---
 
-## The 11 MCP Tools
+## The 12 MCP Tools
 
-All tools communicate via JSON strings. The server serialises every return value to `str` (JSON) and the AI passes these strings directly as arguments to subsequent tools.
+All tools communicate via JSON strings. The server serialises every return value to `str` (JSON) and the AI passes these strings directly as arguments to subsequent tools. The gate JSON from Tool 3 must be passed to Tools 9, 11 and 12; without it every screening output is withheld.
 
 ---
 
 ### Tool 1 — `tool_detect_language`
 
-Detects whether text is English or Indonesian using an ensemble of two libraries.
-
-**Input:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `text` | `str` | Raw input text |
+**Input:** `text` (`str`).
 
 **Output:**
 
 ```json
 {
   "lang": "en",
-  "confidence": 0.82
+  "confidence": 1.0,
+  "supported": true,
+  "mixed_language_share": 0.0
 }
 ```
 
 **Algorithm:**
 
-1. `langdetect.detect(text)` → primary language code
-2. `langid.rank(text)` → ranked list with log-probability scores
-3. Compute confidence from top-1 vs top-2 log-prob margin via sigmoid:
-   ```
-   margin = top_score - second_score
-   confidence = 1.0 / (1.0 + exp(-margin / 30))
-   ```
-4. If both libraries agree → apply `+0.05` agreement boost (capped at 0.95)
-5. If detected language is neither `en` nor `id` → fallback to `en` with confidence 0.50
-6. Empty/whitespace input → `{"lang": "en", "confidence": 0.0}`
+1. langid (all languages, normalised probabilities) picks the language, so Javanese, Sundanese and Malay are reported as themselves instead of being forced to English.
+2. `confidence` = the lower of langid's and langdetect's probability for that language (0.0 when they disagree). It is a heuristic agreement index, never a calibrated probability, and is never shown as a percentage.
+3. `mixed_language_share` = word-weighted share of sentences (≥ 5 words) that an en/id-only classifier assigns to the other language. `null` for unsupported languages.
+4. `supported` is true only for `en`/`id` with `confidence ≥ min_lang_confidence` (0.80).
+5. Empty input → `{"lang": "en", "confidence": 0.0, "supported": false, "mixed_language_share": null}`.
 
 ---
 
 ### Tool 2 — `tool_preprocess_text`
 
-Cleans and tokenises text using spaCy.
-
-**Input:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `text` | `str` | Raw input text |
-| `lang` | `str` | `"en"` or `"id"` |
+**Input:** `text` (`str`), `lang` (`"en"` or `"id"`; anything else raises an error).
 
 **Output:**
 
 ```json
 {
-  "tokens": ["The", "quick", "brown", "fox"],
+  "tokens": ["The", "quick", "brown", "fox", "jumps", "."],
   "sentences": [{"idx": 0, "text": "The quick brown fox jumps."}],
-  "word_count": 4,
+  "word_count": 5,
+  "token_count": 5,
+  "terminal_mark_count": 1,
   "sentence_count": 1,
   "text_clean": "The quick brown fox jumps."
 }
 ```
 
-**Cleaning steps:**
-- Strip URLs (`http://...`, `www...`)
-- Strip mentions (`@username`) and hashtags (`#tag`)
-- Normalise whitespace
+`word_count` counts alphabetic words only, so numbers, emoji and symbols cannot reach a length tier. `token_count` is the older count of all non-punctuation tokens. `terminal_mark_count` counts runs of `.`, `!`, `?` and `…`.
 
-**spaCy models:**
-- English: `en_core_web_sm` (full pipeline with dependency parser)
-- Indonesian: `xx_ent_wiki_sm` — this model has no sentence boundary component; the tool automatically adds a `sentencizer` pipe if no `parser`, `senter`, or `sentencizer` is present
+**Cleaning steps:** strip URLs, mentions and hashtags; normalise whitespace.
+
+**spaCy models:** English `en_core_web_sm`; Indonesian `xx_ent_wiki_sm` with an added `sentencizer`.
 
 ---
 
-### Tool 3 — `tool_analyze_lexical`
+### Tool 3 — `tool_evaluate_gates`
 
-Computes vocabulary diversity and richness metrics.
+Applies every validity gate. Its JSON output is the `gate_json` argument of Tools 9, 11 and 12.
 
 **Input:**
 
-| Parameter | Type | Description |
-|---|---|---|
-| `tokens_json` | `str` | JSON array of tokens (from Tool 2) |
-| `sentences_json` | `str` | JSON array of sentence objects (from Tool 2) |
-| `lang` | `str` | `"en"` or `"id"` |
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `lang_result_json` | `str` | — | Output of Tool 1 |
+| `word_count` | `int` | — | `word_count` from Tool 2 |
+| `terminal_mark_count` | `int` | — | `terminal_mark_count` from Tool 2 |
+| `provenance` | `str` | `"unknown"` | `supervised_unaided`, `unsupervised` or `unknown` |
+| `text_type` | `str` | `"unknown"` | `formal_prose`, `informal` or `unknown` |
 
 **Output:**
 
 ```json
 {
-  "mattr": 0.847,
-  "vocd_d": 82.3,
-  "hapax_ratio": 0.612,
-  "lexical_density": 0.531,
-  "avg_word_length": 5.2,
-  "score": 71.4,
+  "status": "UNVERIFIED_PROVENANCE",
+  "statuses": ["UNVERIFIED_PROVENANCE", "UNVALIDATED"],
+  "reasons": [
+    "UNVERIFIED_PROVENANCE: provenance 'unknown': authorship is not attested as supervised and unaided",
+    "UNVALIDATED: text_type 'unknown' is outside the formal-prose scope; IQ is refused",
+    "UNVALIDATED: IQ mapping is not validated for language 'en' (config/validation.json)"
+  ],
+  "iq_allowed": false,
+  "text_ok": true,
+  "education_allowed": true,
+  "language_norm_unvalidated": true,
+  "lang": "en",
+  "provenance": "unknown",
+  "text_type": "unknown",
+  "policy_version": "2026-10-11"
+}
+```
+
+**Gates (thresholds from `config/validation.json`):**
+
+| Status | Trigger |
+|---|---|
+| `UNSUPPORTED_LANGUAGE` | language not en/id, or detection confidence < 0.80 |
+| `MIXED_LANGUAGE` | `mixed_language_share` > 0.20 |
+| `INSUFFICIENT_TEXT` | fewer than 250 alphabetic words |
+| `INSUFFICIENT_STRUCTURE` | more than 40 words per sentence-ending mark |
+| `UNVERIFIED_PROVENANCE` | provenance is not `supervised_unaided` |
+| `UNVALIDATED` | text type is not `formal_prose`, or the language is not `iq_validated` |
+
+`status` is the highest-precedence triggered status (table order); `OK` only when nothing triggers. IQ is emitted only when `status` is `OK`.
+
+---
+
+### Tool 4 — `tool_analyze_lexical`
+
+**Input:** `tokens_json`, `sentences_json`, `lang`.
+
+**Output:**
+
+```json
+{
+  "mattr": 0.861,
+  "mtld": 155.5,
+  "vocd_d": 88.2,
+  "lexical_density": 0.498,
+  "avg_word_length": 4.7,
+  "token_unit": "lowercased_surface_form",
+  "alpha_token_count": 650,
+  "known_token_count": 650,
+  "oov_rate": 0.0,
+  "low_reliability": false,
+  "reliability_reasons": [],
+  "score_weights": {"mattr": 0.45, "mtld": 0.35, "lexical_density": 0.2},
+  "score": 87.0,
   "evidence": [
     {
       "sentence_idx": 2,
       "sentence": "The epistemological framework...",
-      "triggered_by": ["hapax:epistemological", "hapax:ontological"]
+      "triggered_by": ["rare:epistemological"]
     }
   ]
 }
 ```
 
-**Metrics:**
-
 | Metric | Description |
 |---|---|
 | MATTR | Moving Average Type-Token Ratio over window=50 tokens |
-| VOCD-D | Length-independent vocabulary richness (requires ≥50 tokens) |
-| Hapax ratio | Proportion of unique words appearing exactly once |
-| Lexical density | Content words (length > 3) / all alphabetic tokens |
-| Avg word length | Mean character count across alphabetic tokens |
+| MTLD | Measure of Textual Lexical Diversity (threshold 0.72); length-robust replacement for the hapax ratio |
+| VOCD-D | Reported only (≥ 50 tokens), not scored |
+| Content-word density | Share of tokens not in spaCy's stop-word list for the language |
+| Avg word length | Reported only, not scored (it duplicates readability) |
+| Out-of-dictionary rate | Share of tokens unknown to `wordfreq`; above 0.10 sets `low_reliability` |
 
-**Indonesian:** PySastrawi stemmer is applied to tokens before MATTR computation to normalise morphological variants.
-
-**Score formula:**
-```
-score = MATTR×0.40 + hapax×0.30 + avg_word_length×0.15 + lexical_density×0.15
-```
-
-Each sub-metric is normalised to [0, 100] before weighting.
+Both languages use lowercased surface forms for every diversity metric; no stemming. Tokens unknown to `wordfreq` (typos, keyboard noise) are excluded from MATTR, MTLD and density, so misspellings cannot raise the score.
 
 ---
 
-### Tool 4 — `tool_analyze_syntactic`
+### Tool 5 — `tool_analyze_syntactic`
 
-Analyses grammatical complexity via dependency parsing.
-
-**Input:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `sentences_json` | `str` | JSON array of sentence objects |
-| `lang` | `str` | `"en"` or `"id"` |
+**Input:** `sentences_json`, `lang`.
 
 **Output:**
 
@@ -321,6 +346,7 @@ Analyses grammatical complexity via dependency parsing.
   "subordination_index": 1.2,
   "dependency_depth": 6.1,
   "passive_ratio": 0.15,
+  "comparable_across_languages": false,
   "score": 68.2,
   "evidence": [
     {
@@ -328,102 +354,56 @@ Analyses grammatical complexity via dependency parsing.
       "sentence": "Although the committee...",
       "triggered_by": ["subordinate_clauses:3", "dep_depth:8"]
     }
-  ]
+  ],
+  "note": "Syntactic scores come from different instruments per language and are not comparable across languages."
 }
 ```
 
-**Metrics:**
+**English:** spaCy dependency labels. Subordinate deps `advcl`, `relcl`, `acl`, `csubj`, `ccomp`, `xcomp`; passive deps `nsubjpass`, `auxpass`, `aux:pass`.
 
-| Metric | Description |
-|---|---|
-| Mean sentence length | Average word count per sentence |
-| Clause density | Average number of clause-level nodes per sentence |
-| Subordination index | Average count of subordinate clauses per sentence |
-| Dependency depth | Average max depth of dependency tree per sentence |
-| Passive ratio | Proportion of sentences containing passive constructions |
-
-**Subordinate clause detection deps:** `advcl`, `relcl`, `acl`, `csubj`, `ccomp`, `xcomp`
-
-**Passive detection deps:** `nsubjpass`, `auxpass`, `aux:pass`
-
-**Evidence triggers:** ≥2 subordinate clauses, dependency depth ≥6, passive voice.
-
-**Score formula:**
-```
-score = MSL×0.30 + clause_density×0.35 + subordination×0.25 + dep_depth×0.10
-```
+**Indonesian (rule-based, no parser):**
+- Colloquial connectives are normalised first (`kalo→kalau`, `biar→agar`, `soalnya→karena`, `makanya→maka`, `pas→ketika`, `gara-gara→karena`, `nek→kalau`, `ben→agar`, `trus/terus→lalu`, `tapi→tetapi`); the count is reported as `colloquial_forms_normalised`.
+- `dan`/`atau`/`serta` join clauses only when an overt subject and a predicate follow; temporal words (`sejak`, `selama`, `sampai`, `hingga`, `sebelum`, `setelah`) count only when a predicate follows.
+- Passive = `di-` + a PySastrawi dictionary root (optionally + `-kan`/`-i`), excluding locative roots such as `mana`, `antara`, `atas`. `ter-` forms are not counted as passive.
+- `dependency_depth` is `null` and its weight is renormalised away.
 
 ---
 
-### Tool 5 — `tool_analyze_semantic`
+### Tool 6 — `tool_analyze_semantic`
 
-Measures argument coherence and thematic organisation using sentence embeddings.
-
-**Input:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `text` | `str` | Cleaned text (from `text_clean` in Tool 2 output) |
-| `sentences_json` | `str` | JSON array of sentence objects |
-| `lang` | `str` | `"en"` or `"id"` |
+**Input:** `text`, `sentences_json`, `lang`, optional `segment_boundaries_json` (sentence idx values where a new document starts; transitions across them are skipped).
 
 **Output:**
 
 ```json
 {
-  "argument_coherence": 0.714,
+  "adjacent_sentence_similarity": 0.414,
   "topic_drift_index": 0.082,
   "lexical_chain_density": 0.341,
-  "entity_sophistication": "ABSTRACT",
-  "score": 72.8,
+  "entity_labels": ["ORG", "PERSON"],
+  "transitions": 17,
+  "scaling_status": "uncalibrated",
+  "score": 32.8,
   "evidence": [
-    {
-      "sentence_idx_from": 0,
-      "sentence_idx_to": 1,
-      "coherence": 0.831,
-      "note": "causal chain detected"
-    }
+    {"sentence_idx_from": 0, "sentence_idx_to": 1, "similarity": 0.831, "note": "high overlap"}
   ]
 }
 ```
 
-**Metrics:**
-
 | Metric | Description |
 |---|---|
-| Argument coherence | Mean cosine similarity between consecutive sentence embeddings |
-| Topic drift index | Standard deviation of pairwise coherence values (low = focused) |
-| Lexical chain density | Proportion of content words (>4 chars) recurring across multiple sentences |
-| Entity sophistication | Highest NER category detected: ABSTRACT > CONCRETE > MINIMAL |
+| Adjacent-sentence similarity | Mean cosine similarity of neighbouring sentence embeddings (topical overlap, not argument quality) |
+| Topic drift index | Standard deviation of those similarities; `null` with fewer than 5 transitions |
+| Lexical chain density | Share of words (> 4 chars) recurring across sentences |
+| Entity labels | NER labels, informational only and never scored |
 
-**Embedding model:** `paraphrase-multilingual-MiniLM-L12-v2` (multilingual, handles both EN and ID)
-
-**Entity type classification:**
-- ABSTRACT: `LAW`, `ORG`, `NORP`, `EVENT`, `WORK_OF_ART`, `LANGUAGE`
-- CONCRETE: `PERSON`, `GPE`, `LOC`, `FAC`, `PRODUCT`
-
-**Coherence note thresholds:** >0.75 = "causal chain detected", <0.50 = "slight drift", else "moderate transition"
-
-**Score formula:**
-```
-score = coherence×0.45 + (1-drift)×0.25 + chain_density×0.20 + entity_score×0.10
-```
-where entity scores are: ABSTRACT=80, CONCRETE=50, MINIMAL=20.
-
-Graceful fallback for texts with fewer than 2 sentences (returns `score: 50.0` with explanatory `note` field).
+Fewer than 2 sentences (or no within-document transitions) gives `score: null`, which the style index handles by renormalising weights.
 
 ---
 
-### Tool 6 — `tool_analyze_readability`
+### Tool 7 — `tool_analyze_readability`
 
-Computes standard readability indices.
-
-**Input:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `text` | `str` | Cleaned text |
-| `lang` | `str` | `"en"` or `"id"` |
+**Input:** `text` (cleaned text from Tool 2), `lang`.
 
 **Output:**
 
@@ -444,208 +424,169 @@ Computes standard readability indices.
 }
 ```
 
-**Indonesian adaptation:** `textstat` syllable counting is inaccurate for Bahasa Indonesia. The tool uses a custom syllable counter that counts vowel-nuclei transitions (`_count_id_syllables`), then applies the standard Flesch formula:
-```
-flesch_id = 206.835 - 1.015 × avg_sentence_length - 84.6 × avg_syllables_per_word
-```
-Gunning Fog, ARI, and Coleman-Liau are computed via `textstat` for both languages.
+**Indonesian:** Flesch uses a vowel-nucleus syllable counter (`_count_id_syllables`) with the English coefficients. Gunning Fog, ARI and Coleman-Liau are English formulas computed by `textstat` for both languages, which is why the text complexity band is unavailable for Indonesian.
 
 **Evidence trigger:** sentences where polysyllabic word density ≥ 0.30.
 
-**Score formula:**
-```
-score = fog×0.35 + ari×0.30 + coleman_liau×0.20 + (100-flesch)×0.15
-```
-
 ---
 
-### Tool 7 — `tool_compute_verbal_fluency_score`
+### Tool 8 — `tool_compute_verbal_fluency_score`
 
-Combines the four dimension scores into a single Verbal Fluency Score.
+Combines the four component scores into the style index (the tool keeps its historical name).
 
-**Input:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `lexical_json` | `str` | JSON output from Tool 3 |
-| `syntactic_json` | `str` | JSON output from Tool 4 |
-| `semantic_json` | `str` | JSON output from Tool 5 |
-| `readability_json` | `str` | JSON output from Tool 6 |
-| `word_count` | `int` | From Tool 2 |
-| `lang` | `str` | `"en"` or `"id"` |
+**Input:** `lexical_json`, `syntactic_json`, `semantic_json`, `readability_json`, `word_count`, `lang`.
 
 **Output:**
 
 ```json
 {
-  "vfs": 71.2,
-  "lexical": 68.4,
-  "syntactic": 72.1,
-  "semantic": 74.8,
-  "readability": 65.7,
-  "confidence": 0.82,
+  "vfs": 61.2,
+  "style_index": 61.2,
+  "style_index_label": "Writing-style index (lexical-syntactic complexity). Not an intelligence measure.",
+  "lexical": 87.0,
+  "syntactic": 62.9,
+  "semantic": 19.2,
+  "readability": 68.1,
+  "weights_used": {"lexical": 0.35, "syntactic": 0.25, "semantic": 0.25, "readability": 0.15},
+  "unavailable_components": [],
   "confidence_label": "HIGH",
   "lang": "en",
-  "text_length_words": 312
+  "text_length_words": 650
 }
 ```
 
-**VFS formula:**
-```
-VFS = lexical×0.35 + syntactic×0.25 + semantic×0.25 + readability×0.15
-```
-
-**Confidence tiers:**
-
-| Words | Confidence | Label |
-|---|---|---|
-| < 30 | 0.30 | VERY LOW |
-| 30–99 | 0.55 | LOW |
-| 100–299 | 0.70 | MEDIUM |
-| ≥ 300 | 0.82–0.95 | HIGH |
-
-For texts ≥300 words: `confidence = 0.82 + min(0.13, (word_count - 300) / 1000 × 0.13)`
+`confidence_label` is an ordinal text-length tier (VERY LOW < 30 words, LOW < 100, MEDIUM < 300, HIGH otherwise). No numeric confidence is produced.
 
 ---
 
-### Tool 8 — `tool_predict_iq`
+### Tool 9 — `tool_predict_iq`
 
-Maps VFS to an IQ estimate using the IQ band table.
+**Input:** `style_index` (`float`), `lang` (`str`), `gate_json` (`str`, output of Tool 3; empty string = no gate = withheld).
 
-**Input:**
+**Output (shipped configuration):**
 
-| Parameter | Type | Description |
-|---|---|---|
-| `vfs` | `float` | Verbal Fluency Score (0–100) |
-| `confidence` | `float` | Confidence value from Tool 7 |
+```json
+{
+  "style_index": 61.2,
+  "style_index_label": "Writing-style index (lexical-syntactic complexity). Not an intelligence measure.",
+  "style_band": "Style band 3",
+  "point_estimate": null,
+  "range_low": null,
+  "range_high": null,
+  "range_label": "uncalibrated heuristic range",
+  "classification": null,
+  "percentile": null,
+  "withheld_reason": "UNVERIFIED_PROVENANCE: ...; UNVALIDATED: IQ mapping is not validated for language 'en' (config/validation.json)",
+  "language_norm_unvalidated": true
+}
+```
+
+When the gate status is `OK` and the language is `iq_validated`, `point_estimate` is interpolated in the band, `percentile` is the normal CDF of the IQ under N(100, 15) (clamped to 1–99), and `range_low`/`range_high` are ±25 (or the configured larger half-width).
+
+---
+
+### Tool 10 — `tool_predict_mental_age`
+
+**Input:** `iq_estimate` (`float`; pass `-1` when IQ was withheld), `chronological_age` (`int`; `0` = not supplied).
 
 **Output:**
 
 ```json
 {
-  "point_estimate": 118,
-  "ci_low": 113,
-  "ci_high": 123,
-  "classification": "Above Average / Superior",
-  "percentile": 87
-}
-```
-
-**Algorithm:**
-1. Find the matching VFS band from `iq_norms.json`
-2. Linear interpolation within band: `iq = band.iq_min + position × (band.iq_max - band.iq_min)`
-3. Confidence interval: `ci_half = round(15 - confidence × 10)`
-   - HIGH confidence (0.82) → ±7 points
-   - VERY LOW confidence (0.30) → ±12 points
-4. Percentile: linear interpolation from `band.percentile_min` to 95
-
----
-
-### Tool 9 — `tool_predict_mental_age`
-
-Computes mental age from IQ.
-
-**Input:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `iq_estimate` | `float` | IQ point estimate from Tool 8 |
-| `chronological_age` | `int` | Actual age in years; pass `0` to use population default (30) |
-
-**Output:**
-
-```json
-{
-  "mental_age": 35.4,
-  "based_on_chronological_age": 30,
-  "age_assumed": true,
+  "mental_age": null,
+  "based_on_chronological_age": null,
+  "age_assumed": false,
+  "withheld_reason": "chronological age not supplied; never assumed",
   "formula": "mental_age = (iq / 100) * chronological_age"
 }
 ```
 
-**Formula:** `mental_age = (iq / 100) × chronological_age`
-
-The `age_assumed` flag signals when the population default (30) was used. Pass `--age=N` in the user prompt for subject-specific precision.
+Reported only for an emitted IQ and a supplied age of 16 or less.
 
 ---
 
-### Tool 10 — `tool_estimate_education_level`
+### Tool 11 — `tool_estimate_text_complexity_band`
 
-Estimates education level from readability metrics.
-
-**Input:**
-
-| Parameter | Type | Description |
-|---|---|---|
-| `gunning_fog` | `float` | Gunning Fog index |
-| `ari` | `float` | Automated Readability Index |
-| `lexical_density` | `float` | Lexical density (from Tool 3) |
-| `clause_density` | `float` | Clause density (from Tool 4) |
+**Input:** `gunning_fog`, `ari`, `lexical_density`, `lang`, `gate_json`.
 
 **Output:**
 
 ```json
 {
-  "level_en": "Undergraduate",
-  "level_id": "Sarjana (S1/D4)",
-  "level_code": "S1",
-  "confidence": 0.68,
-  "confidence_label": "MEDIUM"
+  "text_complexity_band": 5,
+  "label": "Complexity band 5",
+  "per_metric_bands": {"gunning_fog": 5, "ari": 5, "lexical_density": 5},
+  "consistency": "CONSISTENT",
+  "withheld_reason": null,
+  "note": "Describes how difficult this text is to read, not the writer's education. Education cannot be inferred from text."
 }
 ```
 
-Levels are matched by scanning `edu_norms.json` from highest to lowest until all three thresholds are met. Confidence reflects how far above the thresholds the metrics fall (see [Configuration Reference](#configuration-reference)).
+Unavailable (all fields `null` with `withheld_reason`) for Indonesian, and whenever a text gate fails.
 
 ---
 
-### Tool 11 — `tool_generate_report`
+### Tool 12 — `tool_generate_report`
 
-Assembles the final output from all preceding tool results.
-
-**Input:** All 10 preceding JSON result strings, plus:
+**Input:** the outputs of Tools 1, 2, 4, 5, 6, 7, 8, 9, 10 and 11, plus:
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `format_flag` | `str` | `"--both"` | Output format (see [Output Flags](#output-flags)) |
-| `chronological_age` | `int` | `0` | Pass-through for mental age display |
+| `chronological_age` | `int` | `0` | Pass-through for display |
 | `verbose_caveats` | `bool` | `false` | Append extended limitations block |
+| `gate_json` | `str` | `""` | Output of Tool 3; without it the report says `Status: UNVERIFIED` and `Provenance: not attested` |
 
-**Output:**
+**Output:** `{"json": {...}, "report": "..."}`; either may be `null` depending on `format_flag`. The JSON carries `status`, `reasons`, `provenance`, `notice`, `language` (with `language_norm_unvalidated`), `style_index`, `iq_prediction`, `mental_age`, `text_complexity` and `metrics`.
 
-```json
-{
-  "json": { ... },
-  "report": "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n  VERBAL FLUENCY INTELLIGENCE REPORT\n..."
-}
-```
+---
 
-Either `json` or `report` may be `null` depending on `format_flag`.
+## Statuses and What They Mean
+
+Every pipeline result, gate evaluation and report carries one `status` and a list of `reasons`. The status decides which outputs exist.
+
+| Status | Meaning | Style index | IQ / percentile / mental age | Complexity band | What to do |
+|---|---|---|---|---|---|
+| `OK` | Every gate passed and the language is validated | shown | shown (experimental) | shown (en) | Human review is still mandatory |
+| `UNVALIDATED` | No validation study has passed for this language, or the text is not formal prose | shown | withheld | shown (en) | Nothing at run time; see `docs/validation/validation-protocol.md` |
+| `UNVERIFIED_PROVENANCE` | Authorship is not attested as supervised and unaided | shown | withheld | shown (en) | Collect a supervised, unaided sample and pass `provenance=supervised_unaided` |
+| `INSUFFICIENT_STRUCTURE` | More than 40 words per sentence-ending mark | shown | withheld | withheld | Use punctuated prose; sentence-length metrics are meaningless otherwise |
+| `INSUFFICIENT_TEXT` | Fewer than 250 alphabetic words | shown | withheld | withheld | Collect a longer sample |
+| `MIXED_LANGUAGE` | More than 20% of words in a second language | shown | withheld | withheld | Analyse single-language samples separately |
+| `UNSUPPORTED_LANGUAGE` | Not English or Indonesian, or detection confidence below 0.80 | not computed | withheld | withheld | No analysis is possible |
+
+When several conditions apply, `status` is the most severe one (the order of rows from the bottom up) and every triggered condition is listed in `statuses` and `reasons`.
+
+**Enabling IQ output.** IQ output for a language is enabled only by editing `mcp-server/config/validation.json` (`"iq_validated": true`) after the validation study for that language has met every acceptance threshold in `docs/validation/validation-protocol.md`. There is deliberately no per-call flag that bypasses a gate. Even then, the output is experimental and must not be the basis of a decision about a person without human review.
+
+**Comparing people.** Results from different languages must never be ranked against each other. `tools.policy.rank_by_style_index` and `tools.policy.assert_same_language` raise `CrossLanguageComparisonError` when asked to do so, and every output carries `language_norm_unvalidated`.
+
+**Low reliability.** Independently of status, `low_reliability` is set when more than 10% of words are unknown to the dictionary (typos, keyboard noise, heavy dialect). Route such results to human review.
 
 ---
 
 ## Scoring Formulas
 
-### Verbal Fluency Score
+### Style index
 
 ```
-VFS = Lexical(0-100) × 0.35
-    + Syntactic(0-100) × 0.25
-    + Semantic(0-100) × 0.25
-    + Readability(0-100) × 0.15
+style_index = Σ w_i × component_i / Σ w_i     over available components
+nominal w:    lexical 0.35, syntactic 0.25, semantic 0.25, readability 0.15
 ```
 
-### Dimension Sub-scores
+A component whose score is `null` (for example semantic with one sentence) is dropped and the remaining weights renormalised; nothing is imputed. The nominal weights are hand-set; `docs/validation/effective-weights.md` reports what actually drives the index.
 
-Each raw metric is normalised to [0, 100] using min-max scaling before weighting:
+### Component sub-scores
+
+Each raw metric is scaled to [0, 100] with `clamp(x) = max(0, min(100, x))`. All bounds are hand-set and uncalibrated.
 
 **Lexical:**
 ```
-MATTR_score    = clamp((mattr - 0.3) / 0.6 × 100)
-hapax_score    = clamp((hapax_ratio - 0.2) / 0.5 × 100)
-awl_score      = clamp((avg_word_length - 3.5) / 4.0 × 100)
-ld_score       = clamp((lexical_density - 0.3) / 0.4 × 100)
+mattr_score    = clamp((mattr - 0.3) / 0.6 × 100)
+mtld_score     = clamp((mtld - 40) / 160 × 100)
+density_score  = clamp((content_word_density - 0.3) / 0.4 × 100)
 
-lexical_score  = MATTR×0.40 + hapax×0.30 + awl×0.15 + ld×0.15
+lexical_score  = (mattr×0.45 + mtld×0.35 + density×0.20) / Σ available weights
 ```
 
 **Syntactic:**
@@ -653,19 +594,20 @@ lexical_score  = MATTR×0.40 + hapax×0.30 + awl×0.15 + ld×0.15
 msl_score      = clamp((mean_sentence_length - 8) / 22 × 100)
 cd_score       = clamp((clause_density - 1.0) / 2.5 × 100)
 si_score       = clamp(subordination_index / 1.5 × 100)
-dd_score       = clamp((dep_depth - 2) / 8 × 100)
+dd_score       = clamp((dep_depth - 2) / 8 × 100)        (English only)
 
 syntactic_score = MSL×0.30 + CD×0.35 + SI×0.25 + DD×0.10
+                  (Indonesian: DD dropped, the rest divided by 0.90)
 ```
 
 **Semantic:**
 ```
-coh_score      = clamp((coherence - 0.3) / 0.6 × 100)
-drift_score    = clamp((1 - drift / 0.3) × 100)
-chain_score    = clamp((chain_density - 0.1) / 0.5 × 100)
-entity_score   = {ABSTRACT: 80, CONCRETE: 50, MINIMAL: 20}
+similarity_score = clamp((similarity - min_lang) / (max_lang - min_lang) × 100)
+                   (min/max from config/semantic_scaling.json; 0.3/0.9 for en and id)
+drift_score      = clamp((1 - drift / 0.3) × 100)          (≥ 5 transitions only)
+chain_score      = clamp((chain_density - 0.1) / 0.5 × 100)
 
-semantic_score = coh×0.45 + drift×0.25 + chain×0.20 + entity×0.10
+semantic_score   = (similarity×0.45 + drift×0.25 + chain×0.20) / Σ available weights
 ```
 
 **Readability:**
@@ -678,42 +620,43 @@ flesch_score   = clamp(100 - flesch)
 readability_score = fog×0.35 + ari×0.30 + cl×0.20 + flesch×0.15
 ```
 
-`clamp(x) = max(0, min(100, x))`
-
 ---
 
-## IQ & Education Mapping
+## Style Bands, Experimental IQ & Text Complexity
 
-### VFS → IQ Bands
+### Style index → style band
 
-| VFS Range | IQ Range | Classification | Percentile Min |
+| Style index | Style band | Experimental IQ range (withheld unless validated) |
+|---|---|---|
+| 85–100 | Style band 5 | 125–145 |
+| 70–84.99 | Style band 4 | 110–124 |
+| 55–69.99 | Style band 3 | 90–109 |
+| 40–54.99 | Style band 2 | 75–89 |
+| 0–39.99 | Style band 1 | 55–74 |
+
+Style bands are neutral ordinal labels. They are not psychometric classifications and carry no clinical meaning. The band table is hand-set and uncalibrated.
+
+When (and only when) a language is marked `iq_validated` in `config/validation.json` and every gate passes, the IQ point is interpolated within the band, the percentile is the normal CDF of that IQ under N(100, 15), and the interval is an **uncalibrated heuristic range** of at least ±25 points. Nothing in this project is a 95% confidence interval.
+
+### Text complexity bands
+
+| Band | Fog Min | ARI Min | Content-word density Min |
 |---|---|---|---|
-| 85–100 | 125–145 | Gifted / Highly Gifted | 95th |
-| 70–84.99 | 110–124 | Above Average / Superior | 75th |
-| 55–69.99 | 90–109 | Average | 25th |
-| 40–54.99 | 75–89 | Below Average | 5th |
-| 0–39.99 | 55–74 | Low | 1st |
+| Complexity band 7 | 17 | 16 | 0.60 |
+| Complexity band 6 | 14 | 13 | 0.55 |
+| Complexity band 5 | 11 | 10 | 0.48 |
+| Complexity band 4 | 9 | 8 | 0.42 |
+| Complexity band 3 | 7 | 6 | 0.36 |
+| Complexity band 2 | 5 | 4 | 0.30 |
+| Complexity band 1 | 0 | 0 | 0.00 |
 
-IQ within each band is computed by linear interpolation: `iq = band_iq_min + position × (band_iq_max - band_iq_min)` where `position = (vfs - band_vfs_min) / (band_vfs_max - band_vfs_min)`.
+Each metric is banded on its own; the reported band is the median of the three. `consistency` is `CONSISTENT` when the per-metric bands are within one band of each other and `CONFLICTING` otherwise. No percentage confidence is reported.
 
-### Education Level Thresholds
+A complexity band describes how difficult the text is to read. It is **not** the writer's education level; education cannot be inferred from text. Bands are unavailable for Indonesian because Fog, ARI and Coleman-Liau are English formulas and no Indonesian calibration exists.
 
-| Code | English Label | Fog Min | ARI Min | Lexical Density Min |
-|---|---|---|---|---|
-| S3 | Doctoral / Postgrad Research | 17 | 16 | 0.60 |
-| S2 | Graduate | 14 | 13 | 0.55 |
-| S1 | Undergraduate | 11 | 10 | 0.48 |
-| D3 | Vocational / Diploma | 9 | 8 | 0.42 |
-| SMA | Senior High School | 7 | 6 | 0.36 |
-| SMP | Junior High School | 5 | 4 | 0.30 |
-| SD | Primary School | 0 | 0 | 0.00 |
+### Mental age
 
-Levels are evaluated from S3 downward; the first level where all three thresholds are met is selected.
-
-**Education confidence:**
-- 3 of 3 thresholds exceeded by margin (fog+1, ari+1, density+0.05) → HIGH (0.82)
-- 2 of 3 → MEDIUM (0.68)
-- 1 or 0 → LOW (0.50)
+The ratio model `mental_age = (iq / 100) × chronological_age` is undefined for adults. Mental age is reported only when an IQ was emitted and a chronological age of 16 or less was supplied; it is never computed from an assumed age.
 
 ---
 
@@ -726,9 +669,9 @@ Pass these flags anywhere in the user's prompt message.
 | `--both` (default) | Full JSON scores + structured text report |
 | `--json` | Full JSON only (no report) |
 | `--report` | Structured text report only (no JSON) |
-| `--scores-only` | Slim 6-key JSON: `vfs`, `iq`, `iq_range`, `mental_age`, `education`, `confidence` |
+| `--scores-only` | Slim JSON: `status`, `provenance`, `style_index`, `style_band`, `iq`, `iq_range`, `iq_range_label`, `mental_age`, `text_complexity_band`, `length_tier`, `language_norm_unvalidated` |
 | `--verbose-caveats` | Adds EXTENDED LIMITATIONS block to the report |
-| `--age=N` | Sets chronological age to integer N for mental age calculation |
+| `--age=N` | Sets chronological age to integer N; mental age is reported only for ages up to 16 when IQ is emitted |
 
 **Example:**
 ```
@@ -746,11 +689,11 @@ The `.agent/` folder makes this skill portable across AI agents without vendor l
 **`.agent/SKILL.md`** — Human and machine-readable skill definition:
 - YAML front-matter: name, description, required tools, MCP server config, output flags
 - Hard constraint block: agent must never estimate scores without tools
-- Full 11-step tool call sequence with input/output schemas
+- Full 12-step tool call sequence with input/output schemas
 - Prompt flag parsing rules
-- Minimum text requirement (10 words)
+- Status handling: withheld fields are reported with their reasons
 
-**`.agent/tools.json`** — JSON Schema contracts for all 11 tools, vendor-neutral.
+**`.agent/tools.json`** — JSON Schema contracts for all 12 tools, vendor-neutral.
 
 ### Using on Different Agents
 
@@ -770,42 +713,65 @@ Point directly at `mcp-server/server.py` and load `SKILL.md` as skill context.
 
 ## Configuration Reference
 
+### `mcp-server/config/validation.json`
+
+The validity policy. Every gate threshold lives here, and IQ output for a language is enabled only by setting `iq_validated: true` after the study in `docs/validation/validation-protocol.md` passes. There is no per-call override.
+
+```json
+{
+  "version": "2026-10-11",
+  "languages": {
+    "en": {"iq_validated": false, "education_validated": false},
+    "id": {"iq_validated": false, "education_validated": false}
+  },
+  "min_words": 250,
+  "min_lang_confidence": 0.80,
+  "max_mixed_language_share": 0.20,
+  "max_words_per_terminal_mark": 40,
+  "uncalibrated_range_half_width": 25,
+  "min_drift_transitions": 5
+}
+```
+
 ### `mcp-server/config/iq_norms.json`
 
 ```json
 {
+  "status": "uncalibrated: hand-set bands with no norm sample (see docs/validation/validation-protocol.md)",
+  "note": "Labels are neutral ordinal style bands, not psychometric classifications.",
   "bands": [
     {
       "vfs_min": 85, "vfs_max": 100,
       "iq_min": 125, "iq_max": 145,
-      "label": "Gifted / Highly Gifted",
-      "percentile_min": 95
+      "label": "Style band 5"
     }
     // ... 4 more bands
   ],
-  "default_chronological_age": 30
+  "iq_mean": 100,
+  "iq_sd": 15,
+  "max_ratio_mental_age_years": 16
 }
 ```
 
-`default_chronological_age` is used when no `--age=N` flag is supplied. Set to the population median (30).
+There is no default chronological age: mental age is never computed from an assumed age.
 
 ### `mcp-server/config/edu_norms.json`
 
 ```json
 {
-  "levels": [
-    {
-      "fog_min": 17, "ari_min": 16, "lexical_density_min": 0.60,
-      "level_en": "Doctoral / Postgrad Research",
-      "level_id": "Doktor / Peneliti Pascasarjana",
-      "code": "S3"
-    }
-    // ... 6 more levels
+  "status": "uncalibrated: hand-set thresholds with no norm sample",
+  "bands": [
+    {"band": 1, "label": "Complexity band 1", "fog_min": 0, "ari_min": 0, "lexical_density_min": 0.0}
+    // ... 6 more bands
   ]
 }
 ```
 
-Both `level_en` and `level_id` are included in every output for bilingual display.
+Despite the historical file name, these are text complexity bands, not education levels.
+
+### `mcp-server/config/semantic_scaling.json`
+
+Per-language bounds for scaling mean adjacent-sentence similarity to 0–100. Both languages currently use the uncalibrated 0.3–0.9 bounds, and the file is marked `"status": "uncalibrated"`.
 
 ### `mcp-server/config/id_syllables.json`
 
@@ -817,104 +783,117 @@ Contains vowel characters and diphthong patterns used by the Indonesian syllable
 
 ```
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-  VERBAL FLUENCY INTELLIGENCE REPORT
-  Generated: 2026-05-18 | Language: English
+  LEXICAL-SYNTACTIC COMPLEXITY REPORT
+  Generated: 2026-10-11 | Language: English
+  Status: UNVERIFIED_PROVENANCE
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-  SUBJECT PROFILE
-  Text input          : 312 words, 18 sentences
-  Lang detection conf : 97%
-  Analysis confidence : HIGH (82%)
+  NOTICE
+  Writing-style index (lexical-syntactic complexity). Not an intelligence measure.
+  Not validated for decisions about individuals (hiring, admissions, clinical, legal). Human review is mandatory.
+  Provenance      : unknown
+  Valid only for supervised, unaided writing produced for the same prompt. AI assistance, translation, dictation or editing change every score.
+  Withheld or limited because:
+    • UNVERIFIED_PROVENANCE: provenance 'unknown': authorship is not attested as supervised and unaided
+    • UNVALIDATED: text_type 'unknown' is outside the formal-prose scope; IQ is refused
+    • UNVALIDATED: IQ mapping is not validated for language 'en' (config/validation.json)
+
+  SUBJECT TEXT
+  Text input          : 312 words (318 tokens), 18 sentences
+  Lang detection      : HIGH
+  Text length tier    : HIGH
+  Language norms      : UNVALIDATED for English; never compare or rank across languages
 
   ──────────────────────────────────────────────
-  VERBAL FLUENCY SCORE
+  STYLE INDEX (lexical-syntactic complexity)
   ──────────────────────────────────────────────
-  Overall VFS     : 71.2 / 100
-  └── Lexical     : 68.4 / 100  ██████░░░░
-  └── Syntactic   : 72.1 / 100  ███████░░░
-  └── Semantic    : 74.8 / 100  ███████░░░
-  └── Readability : 65.7 / 100  ██████░░░░
+  Style index     : 61.2 / 100
+  Style band      : Style band 3
+  └── Lexical     : 70.4 / 100  ███████░░░
+  └── Syntactic   : 62.9 / 100  ██████░░░░
+  └── Semantic    : 19.2 / 100  ██░░░░░░░░
+  └── Readability : 68.1 / 100  ███████░░░
 
   ──────────────────────────────────────────────
-  IQ PREDICTION
+  IQ (EXPERIMENTAL, UNVALIDATED)
   ──────────────────────────────────────────────
-  Point estimate  : 118
-  95% CI range    : 111 – 125
-  Classification  : Above Average / Superior
-  Percentile      : ~87th
+  Withheld        : UNVERIFIED_PROVENANCE: provenance 'unknown': ...
 
   ──────────────────────────────────────────────
   MENTAL AGE
   ──────────────────────────────────────────────
-  Estimated       : 35.4 years
-  (Chronological age assumed: 30 | pass --age=N for precision)
+  Withheld        : IQ estimate withheld
 
   ──────────────────────────────────────────────
-  EDUCATION LEVEL ESTIMATE
+  TEXT COMPLEXITY BAND
   ──────────────────────────────────────────────
-  EN label        : Undergraduate
-  ID label        : Sarjana (S1/D4)
-  Confidence      : MEDIUM (68%)
+  Band            : Complexity band 5
+  Metric agreement: CONSISTENT
+  Describes how difficult this text is to read, not the writer's education. Education cannot be inferred from text.
 
-  [... metrics and evidence sections ...]
-
-  ──────────────────────────────────────────────
-  INTERPRETATION WITH EVIDENCE
-  ──────────────────────────────────────────────
-
-  [LEXICAL — Score 68.4]
-  Vocabulary diversity (MATTR 0.847), lexical density 0.531.
-  Evidence:
-    → "The epistemological framework underpinning this analysis..."
-       [hapax:epistemological, hapax:underpinning]
-
-  [SEMANTIC — Score 74.8]
-  Argument coherence 0.714, topic drift 0.082.
-    → S0→S1 coherence: 0.831 [causal chain detected]
-       "Modern cognitive science has demonstrated that..."
+  [... detailed metrics and evidence sections ...]
 
   ──────────────────────────────────────────────
-  CONFIDENCE & LIMITATIONS
+  LIMITATIONS
   ──────────────────────────────────────────────
-  Overall confidence    : HIGH (82%)
+  Text length tier      : HIGH
   Limiting factors      :
-    • Text-based IQ estimation carries ±10–15 pt error margin
-    • Mental age assumes population median if age not supplied
-    • Education estimate does not account for self-taught learning
-    • Cultural/linguistic background affects psycholinguistic norms
-    • Short texts (< 100 words) significantly reduce reliability
+    • The index rewards surface complexity (longer words and sentences,
+      rarer words, more subordination), not correctness, relevance or
+      argument quality. Padding with jargon raises it.
+    • Genre, topic, editing and first language move every metric.
+    • Punctuation density is a confound for sentence-length metrics.
+    • Education cannot be inferred from text.
+    • Scores are not comparable across languages.
+
+  ──────────────────────────────────────────────
+  INSPIRED BY
+  ──────────────────────────────────────────────
+  Inspired by the work below. None of it validates this tool, and this tool has no individual-level validation.
+  Gunning (1952)            — Fog Index
+  Coleman & Liau (1975)     — CL Index
+  McCarthy & Jarvis (2010)  — MTLD
+  Covington & McFall (2010) — MATTR
 ```
 
 ---
 
 ## Limitations & Ethics
 
-**Statistical estimates, not clinical diagnoses.** This tool produces probabilistic estimates from text patterns. It cannot replace standardised psychometric assessments (WAIS-IV, Raven's Progressive Matrices, etc.).
+**Not an intelligence measure.** The style index measures lexical-syntactic complexity of one text. It has no criterion validation against any standardised ability test (WAIS-IV, Raven's Progressive Matrices, etc.), so IQ output is withheld by default. The validation study that would be required is specified in `docs/validation/validation-protocol.md`; the reference population and norm groups in `docs/validation/norming-plan.md`.
 
-**Error margins are real.** The 95% CI is mathematically derived from the confidence tier, not from validation against a reference population. Treat point estimates as approximate.
+**It rewards complexity, not quality.** Every component rises with longer words, longer sentences, rarer words and more subordination. Correctness, relevance and argument quality are not measured, and padding with jargon raises the index. `docs/validation/effective-weights.md` shows how much of the index is explained by plain length statistics.
 
-**Short text penalty.** Texts under 100 words carry LOW confidence. Under 30 words, VOCD-D cannot be computed and most metrics are unstable.
+**No numeric confidence is a probability.** Length tiers and language-detection labels are ordinal heuristics and are never shown as percentages. The interval around an experimental IQ is an uncalibrated heuristic range (at least ±25 points), not a 95% confidence interval.
 
-**Cultural and linguistic norms.** Psycholinguistic norms underlying the scoring scales are primarily derived from English-language research. Indonesian adaptation uses approximated thresholds.
+**Short, unpunctuated, mixed-language and unsupported texts are refused.** Fewer than 250 alphabetic words gives `INSUFFICIENT_TEXT`; more than 40 words per sentence-ending mark gives `INSUFFICIENT_STRUCTURE`; languages other than English and Indonesian (including Javanese, Sundanese and Malay) give `UNSUPPORTED_LANGUAGE`; more than 20% of words in a second language gives `MIXED_LANGUAGE`.
 
-**Education assumes formal schooling.** The education level estimator cannot distinguish self-taught expertise from institutional education.
+**Authorship is not verified by the tool.** AI assistance, translation, dictation or editing change every score. Results are valid only for supervised, unaided writing produced for the same prompt, and anything else is reported as `UNVERIFIED_PROVENANCE`.
 
-**Do not use for consequential decisions.** These estimates must not be used for hiring, clinical assessment, academic evaluation, or legal proceedings.
+**Genre and register.** Chat logs, social posts and transcripts are outside scope; IQ is refused unless `text_type` is `formal_prose`. Colloquial Indonesian connectives are normalised before syntactic counting so register alone does not lower the score.
+
+**Languages are not comparable.** English and Indonesian use different instruments and uncalibrated scales. Every output carries `language_norm_unvalidated`, and ranking across languages is refused.
+
+**Education cannot be inferred from text.** The text complexity band describes the text, not its writer, and is unavailable for Indonesian.
+
+**Do not use for consequential decisions.** These outputs must not be used for hiring, admissions, clinical assessment, academic evaluation, or legal proceedings. Human review is mandatory for any use.
 
 **Privacy.** Text submitted to the MCP server is processed locally. No data is sent to external services beyond the embedding model (downloaded locally on first use).
 
 ---
 
-## Research Basis
+## Inspired By
 
-| Author(s) | Contribution |
+Inspired by the work below. None of it validates this tool, and this tool has no individual-level validation: no study links its outputs to any individual's ability. The formulas listed are implemented as published; nothing else in this project reproduces a published coefficient.
+
+| Author(s) | What is used here |
 |---|---|
-| Pennebaker et al. | LIWC studies linking language style to personality and intelligence |
-| Crossley et al. | Lexical sophistication indices (MATTR, VOCD-D applications) |
-| Mairesse et al. | Big Five personality and intelligence prediction from text |
-| Gunning (1952) | Gunning Fog Index formula and grade-level calibration |
-| Coleman & Liau (1975) | Coleman-Liau Index |
-| Covington & McFall (2010) | VOCD-D methodology |
+| Gunning (1952) | Gunning Fog Index formula |
+| Coleman & Liau (1975) | Coleman-Liau Index formula |
+| Smith & Senter (1967) | Automated Readability Index formula |
+| Flesch (1948) | Flesch Reading Ease formula |
+| McCarthy & Jarvis (2010) | MTLD lexical diversity measure |
+| Covington & McFall (2010) | MATTR lexical diversity measure |
 
 ---
 

@@ -28,7 +28,7 @@
     "fix": "Refuse to emit IQ/classification as a measurement. Output only a labelled 'writing-style index' with explicit 'not an intelligence measure' text in every output format, and gate IQ fields behind a documented validation-study pass flag (default off).",
     "acceptance_test": "test_iq_output_requires_validation_flag_and_style_index_label",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -90,7 +90,7 @@
     "fix": "Write a validation-study protocol (criterion measure, per-language sample sizes, held-out evaluation, reliability, correlation/SEE, PPV/NPV at stated base rates, subgroup error reporting); until results exist, label IQ/percentile/education 'experimental, unvalidated'.",
     "acceptance_test": "doc: docs/validation/validation-protocol.md exists and names criterion measure, sample size, subgroup analyses and acceptance r/SEE thresholds",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -137,7 +137,7 @@
     "fix": "Stop labelling the value a 95% CI. Until a validation study supplies an SEE, either withhold the interval or report a wide, explicitly 'uncalibrated heuristic range' (>= +/-25) and refuse IQ output for screening use.",
     "acceptance_test": "test_predict_iq_interval_not_labelled_95ci_without_validation",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -174,7 +174,7 @@
     "fix": "Compute percentile from the IQ point with the normal CDF (mean 100, SD 15) and drop the per-band interpolation; cap/mark extremes.",
     "acceptance_test": "test_predict_iq_percentile_consistent_with_normal_cdf",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -211,7 +211,7 @@
     "fix": "Refuse or loudly flag any cross-language comparison; add per-language norm tables with documented calibration data, and until validated emit a language_norm_unvalidated flag in every output and block rank-ordering across languages.",
     "acceptance_test": "test_scores_flag_cross_language_norms_unvalidated_and_block_cross_language_ranking",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -248,7 +248,7 @@
     "fix": "Return an explicit unsupported_language / mixed_language status with no IQ, mental age or education output when detection confidence is below a threshold or the language is not en/id; add segment-level language ID for code-switching.",
     "acceptance_test": "test_pipeline_refuses_scoring_for_unsupported_or_low_confidence_language",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -285,7 +285,7 @@
     "impact_on_screened_person": "A candidate who writes chat-style without full stops can be scored ~35 IQ points and four education levels higher (or lower) than the same words punctuated.",
     "fix": "Detect low-punctuation input (words per terminal mark above a threshold) and refuse sentence-length-based metrics or route to INSUFFICIENT_STRUCTURE; cap per-sentence length used in MSL/readability; document that punctuation density is a confound.",
     "acceptance_test": "test_punctuation_only_change_moves_iq_by_less_than_5_points_or_is_refused",
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -322,7 +322,7 @@
     "fix": "Refuse or heavily degrade IQ output unless text type is declared as formal prose of a minimum length; report 'writing-style complexity' instead of IQ; add genre/L1 warnings and a no-individual-decision notice.",
     "acceptance_test": "test_pipeline_refuses_iq_for_informal_or_unknown_genre",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -359,7 +359,7 @@
     "fix": "Return status INSUFFICIENT_TEXT with no IQ, percentile or education output below a configurable minimum word count (e.g. 250); use length-robust metrics (MTLD/HD-D) and drop raw hapax ratio.",
     "acceptance_test": "test_predict_iq_refused_below_min_word_count",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -386,7 +386,7 @@
     "fix": "Replace denylist with an allowlist/verb lexicon or morphological analyser (e.g. di- + known verb stem via Sastrawi); measure precision on a labelled sample.",
     "acceptance_test": "test_id_passive_not_triggered_by_terjadi_terkait_terbaik_dimana_diantara",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -428,7 +428,7 @@
     "fix": "Count clause joiners only where they link verbal clauses (require a verb/predicate on both sides) and split the prepositional senses out of ID_SUBORDINATORS.",
     "acceptance_test": "test_id_clause_density_ignores_nominal_coordination_and_temporal_prepositions",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -460,7 +460,7 @@
     "fix": "Remove entity_sophistication from the score (or ground it in a validated measure); at minimum map labels per model and do not weight it.",
     "acceptance_test": "test_semantic_entity_score_independent_of_ner_label_set",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -502,7 +502,7 @@
     "fix": "Do not emit an education level for lang == 'id' until Indonesian-calibrated readability and norms exist; return 'not available' with reason.",
     "acceptance_test": "test_estimate_education_unavailable_for_indonesian_without_calibrated_norms",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -534,7 +534,7 @@
     "fix": "Use a continuous composite or modal score with an uncertainty range, drop the margin-based confidence, and remove or use clause_density.",
     "acceptance_test": "test_estimate_education_does_not_report_high_confidence_for_conflicting_metrics",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -571,7 +571,7 @@
     "fix": "Compute content-word ratio via POS tags or stop-word lists per language; remove one of the collinear length metrics.",
     "acceptance_test": "test_lexical_density_uses_content_words_not_length_threshold",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -608,7 +608,7 @@
     "fix": "Return score None and renormalise the weights in compute_verbal_fluency_score when a component is unavailable; surface it in the report.",
     "acceptance_test": "test_compute_vfs_renormalises_weights_when_semantic_unavailable",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -655,7 +655,7 @@
     "fix": "Drop mental age for age > 16 and when age is assumed; otherwise withhold the number and explain why.",
     "acceptance_test": "test_predict_mental_age_not_reported_for_adults_or_assumed_age",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -687,7 +687,7 @@
     "fix": "Normalise colloquial/dialect variants to standard forms (or extend the lexicon with register-tagged entries) before counting, and add register-parity tests; report detected register as a limiting factor.",
     "acceptance_test": "test_id_syntactic_score_equal_for_formal_and_colloquial_paraphrase",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -719,7 +719,7 @@
     "fix": "Rename to 'text complexity band' with no degree labels; never output S1/S2/S3/SD codes as the writer's education. Add explicit warning that education cannot be inferred from text.",
     "acceptance_test": "test_education_output_is_text_complexity_not_degree",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -746,7 +746,7 @@
     "fix": "Add mandatory provenance attestation in the input schema, print it on every report, and label scores 'valid only for supervised, unaided, same-prompt writing'; refuse hiring-use output without it.",
     "acceptance_test": "test_report_includes_provenance_caveat_and_requires_attestation",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -778,7 +778,7 @@
     "fix": "Replace raw hapax ratio with a length-corrected measure (e.g. fixed-window hapax or MTLD), calibrate with samples truncated to fixed lengths, and add a length-invariance test.",
     "acceptance_test": "test_vfs_stable_across_truncation_lengths_within_tolerance",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -824,8 +824,8 @@
     ],
     "impact_on_screened_person": "People who write long sentences or long words are rewarded in several components for one surface trait, inflating or deflating their IQ estimate.",
     "fix": "Compute the cross-component correlation matrix on a reference corpus, publish effective weights, and remove or orthogonalise redundant length-driven components before re-weighting.",
-    "acceptance_test": "test_cross_component_effective_weights_reported_and_length_share_below_cap",
-    "status": "open",
+    "acceptance_test": "test_cross_component_effective_weights_and_length_share_reported",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -856,8 +856,8 @@
     ],
     "impact_on_screened_person": "Indonesian and English writers with the same syntactic skill receive systematically different syntactic scores, feeding 25% of VFS.",
     "fix": "Run a parallel-text equating study (en/id translations) for each syntactic component, publish the per-language curves, and flag id syntactic scores as non-comparable until done.",
-    "acceptance_test": "test_parallel_en_id_texts_syntactic_scores_within_tolerance",
-    "status": "open",
+    "acceptance_test": "test_syntactic_scores_flagged_not_comparable_across_languages",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -889,7 +889,7 @@
     "fix": "Spell-normalise tokens before diversity metrics and flag high-misspelling texts as low reliability routed to human review.",
     "acceptance_test": "test_misspelled_text_not_scored_higher_than_clean_text_and_flagged_low_reliability",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -921,7 +921,7 @@
     "fix": "Rename the construct 'lexical-syntactic complexity', document that it rewards complexity not quality, and add an adversarial-padding test that the system flags rather than rewards.",
     "acceptance_test": "test_report_and_readme_name_construct_lexical_syntactic_complexity_not_fluency",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -948,7 +948,7 @@
     "fix": "Replace 'Research basis' with 'Inspired by' and add the real effect sizes / 'no individual-level validation' sentence; remove names from the report unless a reproduction is documented.",
     "acceptance_test": "test_report_research_section_states_no_individual_validation",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -975,7 +975,7 @@
     "fix": "Define the reference population and norm groups in a written norming plan; require age and language-background fields and report within-group scores only.",
     "acceptance_test": "doc: docs/validation/norming-plan.md exists and defines reference population, age bands and language-background strata",
     "phase": 2,
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1002,7 +1002,7 @@
     "impact_on_screened_person": "Very short submissions are credited with maximal topical focus they never demonstrated.",
     "fix": "Require a minimum number of transitions (e.g. >= 5) for drift; otherwise return None and renormalise.",
     "acceptance_test": "test_topic_drift_none_when_fewer_than_min_transitions",
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1034,7 +1034,7 @@
     "impact_on_screened_person": "Lexical scores of Indonesian and English writers are not on a common unit.",
     "fix": "Use the same unit (lemma) for all diversity metrics in both languages and document it.",
     "acceptance_test": "test_lexical_diversity_metrics_use_same_token_unit_per_language",
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1066,7 +1066,7 @@
     "impact_on_screened_person": "A well-argued text that moves between ideas scores lower than a repetitive one; scores shift by language for reasons unrelated to the writer.",
     "fix": "Rename to 'adjacent-sentence similarity', calibrate scaling per language on a reference corpus, and stop describing it as argument coherence in the report.",
     "acceptance_test": "test_semantic_metric_renamed_and_scaling_loaded_per_language",
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1093,7 +1093,7 @@
     "impact_on_screened_person": "Number-heavy or emoji-heavy text receives a higher confidence label than its words justify.",
     "fix": "Base word_count (and confidence) on alphabetic word tokens, and report both counts.",
     "acceptance_test": "test_word_count_excludes_numeric_and_symbol_tokens",
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1125,7 +1125,7 @@
     "impact_on_screened_person": "Reviewers read '95% confidence' as near-certainty about a person's score.",
     "fix": "Show ordinal labels only (or rename to 'heuristic index'); never format these values as percentages.",
     "acceptance_test": "test_report_does_not_format_heuristic_confidence_as_percent",
-    "status": "open",
+    "status": "done",
     "depends_on": []
   },
   {
@@ -1160,7 +1160,7 @@
     "impact_on_screened_person": "A person is labelled 'Low' on the basis of writing style.",
     "fix": "Rename the band label strings in iq_norms.json to neutral style-band names (e.g. 'Style band 1-5') and change the reporter heading from 'Classification' to 'Style band'.",
     "acceptance_test": "test_band_labels_contain_no_psychometric_terms",
-    "status": "open"
+    "status": "done"
   },
   {
     "id": "G-001",

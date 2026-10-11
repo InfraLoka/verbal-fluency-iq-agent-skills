@@ -1,11 +1,36 @@
 # Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
+"""Lexical diversity and density.
+
+Token unit (F-029): every diversity metric in both languages uses lowercased
+alphabetic surface forms. No stemming or lemmatisation for either language.
+
+Dictionary filter (F-024): tokens that the ``wordfreq`` lexicon does not know
+(zipf_frequency == 0, e.g. typos and keyboard noise) are excluded from MATTR,
+MTLD and lexical density. Their share is ``oov_rate``; above 0.10 the result is
+flagged ``low_reliability`` and should be routed to human review.
+"""
+
 from collections import Counter
-from typing import List
+from functools import lru_cache
 
 from lexicalrichness import LexicalRichness
+from spacy.lang.en.stop_words import STOP_WORDS as EN_STOP_WORDS
+from spacy.lang.id.stop_words import STOP_WORDS as ID_STOP_WORDS
+from wordfreq import zipf_frequency
+
+TOKEN_UNIT = "lowercased_surface_form"
+STOP_WORDS = {"en": EN_STOP_WORDS, "id": ID_STOP_WORDS}
+OOV_RELIABILITY_THRESHOLD = 0.10
+MATTR_WINDOW = 50
+MIN_MTLD_TOKENS = 10
+MIN_VOCD_TOKENS = 50
+# Rare-but-real words (shown as evidence only; never scored).
+RARE_ZIPF_MAX = 3.5
+# avg_word_length is reported but not scored: it duplicates readability (F-015).
+SCORE_WEIGHTS = {"mattr": 0.45, "mtld": 0.35, "lexical_density": 0.20}
 
 
-def _mattr(tokens: List[str], window: int = 50) -> float:
+def _mattr(tokens: list[str], window: int = MATTR_WINDOW) -> float:
     if len(tokens) < window:
         return len(set(tokens)) / len(tokens) if tokens else 0.0
     ttrs = [
@@ -15,71 +40,93 @@ def _mattr(tokens: List[str], window: int = 50) -> float:
     return sum(ttrs) / len(ttrs)
 
 
-def analyze_lexical(tokens: List[str], sentences: List[dict], lang: str) -> dict:
-    alpha = [t for t in tokens if t.isalpha()]
+@lru_cache(maxsize=65536)
+def _zipf(word: str, lang: str) -> float:
+    return zipf_frequency(word, lang)
+
+
+def _scale(value: float, low: float, high: float) -> float:
+    return min(100.0, max(0.0, (value - low) / (high - low) * 100))
+
+
+def analyze_lexical(tokens: list[str], sentences: list[dict], lang: str) -> dict:
+    alpha = [t.lower() for t in tokens if t.isalpha()]
     if not alpha:
-        return {"score": 0.0, "error": "No alphabetic tokens found"}
+        return {"score": None, "error": "No alphabetic tokens found"}
 
-    lower = [t.lower() for t in alpha]
+    known = [t for t in alpha if _zipf(t, lang) > 0]
+    oov_rate = round(1 - len(known) / len(alpha), 3)
+    reliability_reasons = []
+    if oov_rate > OOV_RELIABILITY_THRESHOLD:
+        reliability_reasons.append(
+            f"{oov_rate:.2f} of words are not in the {lang} dictionary "
+            f"(max {OOV_RELIABILITY_THRESHOLD:.2f}); route to human review"
+        )
+    if not known:
+        return {
+            "score": None,
+            "error": "No dictionary words found",
+            "oov_rate": oov_rate,
+            "low_reliability": True,
+            "reliability_reasons": reliability_reasons,
+            "token_unit": TOKEN_UNIT,
+        }
 
-    if lang == "id":
-        try:
-            from Sastrawi.Stemmer.StemmerFactory import StemmerFactory
-
-            stemmer = StemmerFactory().create_stemmer()
-            mattr_tokens = [stemmer.stem(t) for t in lower]
-        except ImportError:
-            mattr_tokens = lower
-    else:
-        mattr_tokens = lower
-
-    mattr = round(_mattr(mattr_tokens), 3)
-
+    mattr = round(_mattr(known), 3)
+    mtld = None
+    if len(known) >= MIN_MTLD_TOKENS:
+        mtld = round(float(LexicalRichness(" ".join(known)).mtld(threshold=0.72)), 1)
     vocd_d = None
-    if len(alpha) >= 50:
+    if len(known) >= MIN_VOCD_TOKENS:
         try:
-            lex = LexicalRichness(" ".join(alpha))
-            vocd_d = round(lex.vocd(), 1)
-        except Exception:
+            vocd_d = round(float(LexicalRichness(" ".join(known)).vocd()), 1)
+        except (ValueError, ZeroDivisionError):
             vocd_d = None
 
-    freq = Counter(lower)
-    hapax_count = sum(1 for f in freq.values() if f == 1)
-    hapax_ratio = round(hapax_count / len(freq), 3) if freq else 0.0
-
+    stop = STOP_WORDS[lang]
+    lexical_density = round(sum(1 for t in known if t not in stop) / len(known), 3)
     avg_word_length = round(sum(len(t) for t in alpha) / len(alpha), 1)
 
-    content_words = [t for t in alpha if len(t) > 3]
-    lexical_density = round(len(content_words) / len(alpha), 3)
+    parts = {
+        "mattr": _scale(mattr, 0.3, 0.9),
+        "lexical_density": _scale(lexical_density, 0.3, 0.7),
+    }
+    if mtld is not None:
+        parts["mtld"] = _scale(mtld, 40.0, 200.0)
+    total_weight = sum(SCORE_WEIGHTS[k] for k in parts)
+    score = round(sum(parts[k] * SCORE_WEIGHTS[k] for k in parts) / total_weight, 1)
 
-    mattr_score = min(100.0, max(0.0, (mattr - 0.3) / 0.6 * 100))
-    hapax_score = min(100.0, max(0.0, (hapax_ratio - 0.2) / 0.5 * 100))
-    awl_score = min(100.0, max(0.0, (avg_word_length - 3.5) / 4.0 * 100))
-    ld_score = min(100.0, max(0.0, (lexical_density - 0.3) / 0.4 * 100))
-
-    score = round(
-        mattr_score * 0.40 + hapax_score * 0.30 + awl_score * 0.15 + ld_score * 0.15, 1
-    )
-
+    freq = Counter(known)
     evidence = []
     for sent in sentences:
-        words = [w for w in sent["text"].split() if w.isalpha()]
-        rare = [w for w in words if freq.get(w.lower(), 0) == 1 and len(w) > 5]
+        words = [w.lower() for w in sent["text"].split() if w.isalpha()]
+        rare = [
+            w
+            for w in words
+            if freq.get(w, 0) == 1 and len(w) > 5 and 0 < _zipf(w, lang) < RARE_ZIPF_MAX
+        ]
         if rare:
             evidence.append(
                 {
                     "sentence_idx": sent["idx"],
                     "sentence": sent["text"],
-                    "triggered_by": [f"hapax:{w}" for w in rare[:3]],
+                    "triggered_by": [f"rare:{w}" for w in rare[:3]],
                 }
             )
 
     return {
         "mattr": mattr,
+        "mtld": mtld,
         "vocd_d": vocd_d,
-        "hapax_ratio": hapax_ratio,
         "lexical_density": lexical_density,
         "avg_word_length": avg_word_length,
+        "token_unit": TOKEN_UNIT,
+        "alpha_token_count": len(alpha),
+        "known_token_count": len(known),
+        "oov_rate": oov_rate,
+        "low_reliability": bool(reliability_reasons),
+        "reliability_reasons": reliability_reasons,
+        "score_weights": {k: SCORE_WEIGHTS[k] for k in parts},
         "score": score,
         "evidence": evidence[:3],
     }

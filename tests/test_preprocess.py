@@ -18,9 +18,24 @@ def test_detect_indonesian():
     assert result["confidence"] > 0.5
 
 
-def test_detect_returns_en_or_id_only():
+def test_detect_reports_unsupported_language_instead_of_forcing_english():
     result = detect_language("Bonjour le monde, comment ca va aujourd'hui?")
-    assert result["lang"] in ("en", "id")
+    assert result["lang"] == "fr"
+    assert result["supported"] is False
+
+
+def test_detect_supported_language_has_flags_and_mixed_share():
+    result = detect_language("Saya pergi ke pasar untuk membeli sayuran segar.")
+    assert result["supported"] is True
+    assert result["mixed_language_share"] == 0.0
+
+
+def test_detect_low_confidence_is_not_supported():
+    result = detect_language(
+        "The quick brown fox.", policy={"min_lang_confidence": 1.01}
+    )
+    assert result["lang"] == "en"
+    assert result["supported"] is False
 
 
 def test_preprocess_strips_urls():
@@ -54,6 +69,7 @@ def test_detect_empty_string_returns_fallback():
     result = detect_language("")
     assert result["lang"] == "en"
     assert result["confidence"] == 0.0
+    assert result["supported"] is False
 
 
 def test_preprocess_invalid_lang_raises():
@@ -67,3 +83,16 @@ def test_preprocess_empty_string_returns_empty():
     result = preprocess_text("", "en")
     assert result["word_count"] == 0
     assert result["tokens"] == []
+
+
+def test_word_count_excludes_numeric_and_symbol_tokens():
+    result = preprocess_text(
+        "Total 12345 67890 2024 100 200 300 400 500 is fine.", "en"
+    )
+    assert result["word_count"] == 3
+    assert result["token_count"] == 11
+
+
+def test_preprocess_counts_terminal_marks():
+    result = preprocess_text("One two. Three four! Five six? Seven", "en")
+    assert result["terminal_mark_count"] == 3

@@ -1,0 +1,11 @@
+Before you install the backup agent, make sure that the server has at least two gigabytes of free disk space and that the system clock is synchronised with a reliable time source. Backups that are created with an incorrect clock can be difficult to restore in the right order.
+
+First, download the installation package from the internal software portal. Choose the version that matches the operating system of the server. Do not use packages that were sent by email or copied from another machine, because they may be outdated or modified.
+
+Second, open a terminal with administrator rights and run the installer. The installer will ask for the address of the backup controller and for a registration token. You can find the token in the controller dashboard under the section for new devices. Each token can be used only once and expires after twenty four hours.
+
+Third, select the folders that should be protected. By default the agent includes the system configuration and the user home directories. If the server hosts a database, add the database export folder and schedule the export to run at least thirty minutes before the backup window starts. Copying live database files directly is not supported and may produce corrupted backups.
+
+Fourth, run a test backup. The first backup may take several hours because every file must be copied. Later backups are faster because only changed blocks are transferred. When the test has finished, open the controller dashboard and confirm that the job status is green and that the reported size is reasonable.
+
+Finally, perform a test restore of a single file to a temporary location. A backup that has never been restored should not be trusted. Record the date of the test in the maintenance log and repeat the restore test every three months. If any step fails, collect the agent log file and contact the infrastructure team before making further changes.

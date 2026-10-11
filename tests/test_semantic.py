@@ -1,8 +1,11 @@
 # Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
+import json
+import pathlib
 import sys
 
 sys.path.insert(0, "mcp-server")
 
+from tools import semantic
 from tools.semantic import analyze_semantic
 
 COHERENT_TEXT = (
@@ -25,26 +28,37 @@ INCOHERENT_SENTENCES = [
     {"idx": 3, "text": "Mountains are tall."},
 ]
 
+SIX_SENTENCES = COHERENT_SENTENCES + [
+    {"idx": 4, "text": "Cooperation depends on trust between governments."},
+    {"idx": 5, "text": "Trust grows when commitments are verified."},
+]
+SIX_TEXT = " ".join(s["text"] for s in SIX_SENTENCES)
+
 SINGLE_SENTENCE = [{"idx": 0, "text": "Hello world."}]
 
 
 def test_returns_required_keys():
     result = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
     for key in (
-        "argument_coherence",
+        "adjacent_sentence_similarity",
         "topic_drift_index",
         "lexical_chain_density",
-        "entity_sophistication",
+        "entity_labels",
+        "transitions",
+        "scaling_status",
         "score",
         "evidence",
     ):
         assert key in result
 
 
-def test_coherent_text_higher_coherence():
+def test_coherent_text_higher_similarity():
     coherent = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
     incoherent = analyze_semantic(INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en")
-    assert coherent["argument_coherence"] > incoherent["argument_coherence"]
+    assert (
+        coherent["adjacent_sentence_similarity"]
+        > incoherent["adjacent_sentence_similarity"]
+    )
 
 
 def test_score_between_0_and_100():
@@ -52,45 +66,99 @@ def test_score_between_0_and_100():
     assert 0 <= result["score"] <= 100
 
 
-def test_single_sentence_returns_gracefully():
+def test_single_sentence_returns_none_score_with_note():
     result = analyze_semantic("Hello world.", SINGLE_SENTENCE, "en")
-    assert "note" in result or result["score"] is not None
+    assert result["score"] is None
+    assert "note" in result
 
 
-def test_evidence_has_coherence_and_note():
+def test_evidence_has_similarity_and_note():
     result = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
     for ev in result["evidence"]:
         assert "sentence_idx_from" in ev
         assert "sentence_idx_to" in ev
-        assert "coherence" in ev
+        assert "similarity" in ev
         assert "note" in ev
 
 
-def test_entity_sophistication_is_valid_label():
-    result = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
-    assert result["entity_sophistication"] in ("ABSTRACT", "CONCRETE", "MINIMAL")
-
-
 def test_default_segment_boundaries_unchanged():
-    # Passing None must be identical to passing nothing.
     a = analyze_semantic(INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en")
     b = analyze_semantic(INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en", None)
     assert a == b
 
 
 def test_segment_boundary_excludes_cross_document_pair():
-    # With a boundary before idx 2, the 1→2 transition is dropped, changing the mean.
     base = analyze_semantic(INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en")
     seg = analyze_semantic(
         INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en", segment_boundaries=[2]
     )
-    assert seg["argument_coherence"] != base["argument_coherence"]
+    assert seg["adjacent_sentence_similarity"] != base["adjacent_sentence_similarity"]
 
 
 def test_all_pairs_straddle_boundaries_returns_gracefully():
-    # Every sentence is its own document → no within-document transitions.
     result = analyze_semantic(
         INCOHERENT_TEXT, INCOHERENT_SENTENCES, "en", segment_boundaries=[1, 2, 3]
     )
-    assert result["argument_coherence"] is None
+    assert result["adjacent_sentence_similarity"] is None
+    assert result["score"] is None
     assert "note" in result
+
+
+def test_semantic_entity_score_independent_of_ner_label_set(monkeypatch):
+    scores = []
+    for labels in ([], ["PER"], ["ORG"], ["LAW", "NORP"], ["LOC", "MISC"]):
+        monkeypatch.setattr(semantic, "_entity_labels", lambda t, lang, ls=labels: ls)
+        result = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
+        assert result["entity_labels"] == labels
+        assert "entity_sophistication" not in result
+        scores.append(result["score"])
+    assert len(set(scores)) == 1
+
+
+def test_topic_drift_none_when_fewer_than_min_transitions():
+    two = analyze_semantic(
+        "Climate change is accelerating. Pizza is delicious.",
+        [
+            {"idx": 0, "text": "Climate change is accelerating."},
+            {"idx": 1, "text": "Pizza is delicious."},
+        ],
+        "en",
+    )
+    assert two["transitions"] == 1
+    assert two["topic_drift_index"] is None
+    assert two["score"] is not None
+    four = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
+    assert four["transitions"] == 3
+    assert four["topic_drift_index"] is None
+    six = analyze_semantic(SIX_TEXT, SIX_SENTENCES, "en")
+    assert six["transitions"] == 5
+    assert isinstance(six["topic_drift_index"], float)
+
+
+def test_semantic_metric_renamed_and_scaling_loaded_per_language(monkeypatch):
+    cfg = json.loads(
+        pathlib.Path("mcp-server/config/semantic_scaling.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    assert cfg["status"] == "uncalibrated"
+    assert set(cfg["languages"]) == {"en", "id"}
+    for lang in ("en", "id"):
+        assert cfg["languages"][lang] == {"similarity_min": 0.3, "similarity_max": 0.9}
+
+    result = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
+    assert "argument_coherence" not in result
+    assert result["scaling_status"] == "uncalibrated"
+
+    patched = {
+        "status": "uncalibrated",
+        "languages": {
+            "en": cfg["languages"]["en"],
+            "id": {"similarity_min": 0.0, "similarity_max": 1.0},
+        },
+    }
+    monkeypatch.setattr(semantic, "_load_scaling", lambda: patched)
+    en_after = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "en")
+    id_after = analyze_semantic(COHERENT_TEXT, COHERENT_SENTENCES, "id")
+    assert en_after["score"] == result["score"]
+    assert id_after["score"] != result["score"]

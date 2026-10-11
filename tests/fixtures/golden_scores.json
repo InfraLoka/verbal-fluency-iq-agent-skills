@@ -1,35 +1,128 @@
 {
   "example/aqilah/source/1.md": {
-    "lang": "id",
-    "vfs": 50.4,
-    "iq": 85,
-    "ci": [
-      79,
-      91
+    "status": "MIXED_LANGUAGE",
+    "statuses": [
+      "MIXED_LANGUAGE",
+      "UNVERIFIED_PROVENANCE",
+      "UNVALIDATED"
     ],
-    "edu": "D3",
-    "word_count": 2837
+    "reasons": [
+      "MIXED_LANGUAGE: 0.25 of words are in a second language (max 0.20)",
+      "UNVERIFIED_PROVENANCE: provenance 'unknown': authorship is not attested as supervised and unaided",
+      "UNVALIDATED: text_type 'unknown' is outside the formal-prose scope; IQ is refused",
+      "UNVALIDATED: IQ mapping is not validated for language 'id' (config/validation.json)"
+    ],
+    "lang": "id",
+    "lang_confidence": 1.0,
+    "language_norm_unvalidated": true,
+    "provenance": "unknown",
+    "text_type": "unknown",
+    "policy_version": "2026-10-11",
+    "style_index": 43.7,
+    "style_index_label": "Writing-style index (lexical-syntactic complexity). Not an intelligence measure.",
+    "style_band": "Style band 2",
+    "components": {
+      "lexical": 69.2,
+      "syntactic": 31.4,
+      "semantic": 19.2,
+      "readability": 45.8
+    },
+    "iq": null,
+    "percentile": null,
+    "classification": null,
+    "range": null,
+    "range_label": null,
+    "withheld_reason": "MIXED_LANGUAGE: 0.25 of words are in a second language (max 0.20); UNVERIFIED_PROVENANCE: provenance 'unknown': authorship is not attested as supervised and unaided; UNVALIDATED: text_type 'unknown' is outside the formal-prose scope; IQ is refused; UNVALIDATED: IQ mapping is not validated for language 'id' (config/validation.json)",
+    "mental_age": null,
+    "text_complexity_band": null,
+    "text_complexity_consistency": null,
+    "word_count": 2789,
+    "token_count": 2837,
+    "low_reliability": true,
+    "reliability_reasons": [
+      "0.11 of words are not in the id dictionary (max 0.10); route to human review"
+    ]
   },
   "example/bimo/source/1.md": {
-    "lang": "id",
-    "vfs": 57.8,
-    "iq": 94,
-    "ci": [
-      87,
-      101
+    "status": "UNVERIFIED_PROVENANCE",
+    "statuses": [
+      "UNVERIFIED_PROVENANCE",
+      "UNVALIDATED"
     ],
-    "edu": "S1",
-    "word_count": 436
+    "reasons": [
+      "UNVERIFIED_PROVENANCE: provenance 'unknown': authorship is not attested as supervised and unaided",
+      "UNVALIDATED: text_type 'unknown' is outside the formal-prose scope; IQ is refused",
+      "UNVALIDATED: IQ mapping is not validated for language 'id' (config/validation.json)"
+    ],
+    "lang": "id",
+    "lang_confidence": 1.0,
+    "language_norm_unvalidated": true,
+    "provenance": "unknown",
+    "text_type": "unknown",
+    "policy_version": "2026-10-11",
+    "style_index": 56.6,
+    "style_index_label": "Writing-style index (lexical-syntactic complexity). Not an intelligence measure.",
+    "style_band": "Style band 3",
+    "components": {
+      "lexical": 91.7,
+      "syntactic": 34.8,
+      "semantic": 20.0,
+      "readability": 71.9
+    },
+    "iq": null,
+    "percentile": null,
+    "classification": null,
+    "range": null,
+    "range_label": null,
+    "withheld_reason": "UNVERIFIED_PROVENANCE: provenance 'unknown': authorship is not attested as supervised and unaided; UNVALIDATED: text_type 'unknown' is outside the formal-prose scope; IQ is refused; UNVALIDATED: IQ mapping is not validated for language 'id' (config/validation.json)",
+    "mental_age": null,
+    "text_complexity_band": null,
+    "text_complexity_consistency": null,
+    "word_count": 419,
+    "token_count": 436,
+    "low_reliability": true,
+    "reliability_reasons": [
+      "0.11 of words are not in the id dictionary (max 0.10); route to human review"
+    ]
   },
   "example/fabhian/source/1.md": {
-    "lang": "id",
-    "vfs": 52.3,
-    "iq": 86,
-    "ci": [
-      79,
-      93
+    "status": "UNVERIFIED_PROVENANCE",
+    "statuses": [
+      "UNVERIFIED_PROVENANCE",
+      "UNVALIDATED"
     ],
-    "edu": "S1",
-    "word_count": 340
+    "reasons": [
+      "UNVERIFIED_PROVENANCE: provenance 'unknown': authorship is not attested as supervised and unaided",
+      "UNVALIDATED: text_type 'unknown' is outside the formal-prose scope; IQ is refused",
+      "UNVALIDATED: IQ mapping is not validated for language 'id' (config/validation.json)"
+    ],
+    "lang": "id",
+    "lang_confidence": 1.0,
+    "language_norm_unvalidated": true,
+    "provenance": "unknown",
+    "text_type": "unknown",
+    "policy_version": "2026-10-11",
+    "style_index": 53.6,
+    "style_index_label": "Writing-style index (lexical-syntactic complexity). Not an intelligence measure.",
+    "style_band": "Style band 2",
+    "components": {
+      "lexical": 88.7,
+      "syntactic": 44.9,
+      "semantic": 14.3,
+      "readability": 51.7
+    },
+    "iq": null,
+    "percentile": null,
+    "classification": null,
+    "range": null,
+    "range_label": null,
+    "withheld_reason": "UNVERIFIED_PROVENANCE: provenance 'unknown': authorship is not attested as supervised and unaided; UNVALIDATED: text_type 'unknown' is outside the formal-prose scope; IQ is refused; UNVALIDATED: IQ mapping is not validated for language 'id' (config/validation.json)",
+    "mental_age": null,
+    "text_complexity_band": null,
+    "text_complexity_consistency": null,
+    "word_count": 325,
+    "token_count": 340,
+    "low_reliability": false,
+    "reliability_reasons": []
   }
 }

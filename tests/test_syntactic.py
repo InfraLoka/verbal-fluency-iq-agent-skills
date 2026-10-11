@@ -1,9 +1,12 @@
 # Copyright (c) 2026 InfraLoka. All rights reserved. Proprietary and confidential.
 import sys
 
+import pytest
+
 sys.path.insert(0, "mcp-server")
 
-from tools.syntactic import analyze_syntactic
+from tools.policy import CrossLanguageComparisonError, rank_by_style_index
+from tools.syntactic import analyze_syntactic, is_di_passive
 
 COMPLEX_SENTENCES = [
     {
@@ -171,3 +174,94 @@ def test_id_non_passive_di_ter_words_not_counted():
 def test_id_true_passive_still_detected():
     result = analyze_syntactic([{"idx": 0, "text": "Surat itu ditulis kemarin."}], "id")
     assert result["passive_ratio"] > 0
+
+
+def test_id_passive_not_triggered_by_terjadi_terkait_terbaik_dimana_diantara():
+    text = (
+        "Hal itu terjadi dan terkait dengan hasil terbaik dimana kami berada "
+        "diantara mereka"
+    )
+    result = analyze_syntactic([{"idx": 0, "text": text}], "id")
+    assert result["passive_ratio"] == 0
+    for word in ("terjadi", "terkait", "terbaik", "dimana", "diantara", "dinas"):
+        assert not is_di_passive(word), word
+    for word in ("ditulis", "direvisi", "diserahkan", "dilanjutkan", "dikirimi"):
+        assert is_di_passive(word), word
+
+
+def test_id_clause_density_ignores_nominal_coordination_and_temporal_prepositions():
+    text = "Saya makan nasi dan atau minum teh sejak pagi sampai malam selama seminggu"
+    result = analyze_syntactic([{"idx": 0, "text": text}], "id")
+    assert result["clause_density"] == 1.0
+    assert result["subordination_index"] == 0.0
+
+
+def test_id_clausal_coordination_and_temporal_clauses_still_counted():
+    text = "Ayah membaca koran dan saya menulis surat sejak dia pindah ke kota."
+    result = analyze_syntactic([{"idx": 0, "text": text}], "id")
+    assert result["clause_density"] == 3.0
+    assert result["subordination_index"] == 1.0
+
+
+ID_FORMAL = [
+    {
+        "idx": 0,
+        "text": "Kalau hujan turun, kami tetap berangkat agar acara tidak batal.",
+    },
+    {
+        "idx": 1,
+        "text": "Saya pulang cepat karena badan saya lelah, tetapi pekerjaan belum selesai.",
+    },
+    {
+        "idx": 2,
+        "text": "Ketika dia datang, kami langsung makan karena semua orang sudah lapar.",
+    },
+]
+ID_COLLOQUIAL = [
+    {
+        "idx": 0,
+        "text": "Kalo hujan turun, kami tetap berangkat biar acara tidak batal.",
+    },
+    {
+        "idx": 1,
+        "text": "Saya pulang cepat soalnya badan saya lelah, tapi pekerjaan belum selesai.",
+    },
+    {
+        "idx": 2,
+        "text": "Pas dia datang, kami langsung makan gara-gara semua orang sudah lapar.",
+    },
+]
+
+
+def test_id_syntactic_score_equal_for_formal_and_colloquial_paraphrase():
+    formal = analyze_syntactic(ID_FORMAL, "id")
+    colloquial = analyze_syntactic(ID_COLLOQUIAL, "id")
+    assert colloquial["score"] == formal["score"]
+    assert colloquial["clause_density"] == formal["clause_density"]
+    assert colloquial["subordination_index"] == formal["subordination_index"]
+    assert formal["colloquial_forms_normalised"] == 0
+    assert colloquial["colloquial_forms_normalised"] == 6
+
+
+def test_syntactic_scores_flagged_not_comparable_across_languages():
+    en = analyze_syntactic(COMPLEX_SENTENCES, "en")
+    idn = analyze_syntactic(ID_COMPLEX, "id")
+    for result in (en, idn):
+        assert result["comparable_across_languages"] is False
+        assert "not comparable across languages" in result["note"]
+    with pytest.raises(CrossLanguageComparisonError):
+        rank_by_style_index(
+            [
+                {"lang": "en", "style_index": en["score"]},
+                {"lang": "id", "style_index": idn["score"]},
+            ]
+        )
+
+
+def test_id_locative_written_solid_is_not_passive_but_suffixed_form_is():
+    text = "Saya tinggal dirumah dan bekerja dikantor dekat dipasar."
+    result = analyze_syntactic([{"idx": 0, "text": text}], "id")
+    assert result["passive_ratio"] == 0
+    assert is_di_passive("dijalankan")
+    assert is_di_passive("dirumahkan")
+    assert not is_di_passive("dijalan")

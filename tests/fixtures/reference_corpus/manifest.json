@@ -1,0 +1,17 @@
+{
+  "description": "Synthetic reference passages written for this repository. No real person's text. Used for length-invariance tests and the component correlation report (F-021, F-022).",
+  "passages": [
+    {"name": "en_academic_essay", "lang": "en", "genre": "academic_essay", "text_type": "formal_prose"},
+    {"name": "en_news_report", "lang": "en", "genre": "news_report", "text_type": "formal_prose"},
+    {"name": "en_personal_narrative", "lang": "en", "genre": "personal_narrative", "text_type": "formal_prose"},
+    {"name": "en_technical_instructions", "lang": "en", "genre": "technical_instructions", "text_type": "formal_prose"},
+    {"name": "en_opinion", "lang": "en", "genre": "opinion", "text_type": "formal_prose"},
+    {"name": "en_informal_email", "lang": "en", "genre": "informal_email", "text_type": "informal"},
+    {"name": "id_academic_essay", "lang": "id", "genre": "academic_essay", "text_type": "formal_prose"},
+    {"name": "id_news_report", "lang": "id", "genre": "news_report", "text_type": "formal_prose"},
+    {"name": "id_personal_narrative", "lang": "id", "genre": "personal_narrative", "text_type": "formal_prose"},
+    {"name": "id_technical_instructions", "lang": "id", "genre": "technical_instructions", "text_type": "formal_prose"},
+    {"name": "id_opinion", "lang": "id", "genre": "opinion", "text_type": "formal_prose"},
+    {"name": "id_informal_chat", "lang": "id", "genre": "informal_chat", "text_type": "informal"}
+  ]
+}

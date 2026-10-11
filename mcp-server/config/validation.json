@@ -1,0 +1,13 @@
+{
+  "version": "2026-10-11",
+  "languages": {
+    "en": {"iq_validated": false, "education_validated": false},
+    "id": {"iq_validated": false, "education_validated": false}
+  },
+  "min_words": 250,
+  "min_lang_confidence": 0.80,
+  "max_mixed_language_share": 0.20,
+  "max_words_per_terminal_mark": 40,
+  "uncalibrated_range_half_width": 25,
+  "min_drift_transitions": 5
+}

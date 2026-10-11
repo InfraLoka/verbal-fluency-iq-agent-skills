@@ -1,56 +1,69 @@
 {
-  "schema_version": "1.0",
+  "schema_version": "2.0",
   "mcp_server": "verbal-fluency-mcp",
   "tools": [
     {
       "name": "tool_detect_language",
-      "description": "Detect language (en|id) from text with confidence score",
+      "description": "Detect language; reports unsupported languages as themselves. confidence is a heuristic agreement index, not a probability",
       "parameters": {
         "text": { "type": "string", "required": true }
       },
-      "returns": { "lang": "string", "confidence": "number" }
+      "returns": { "lang": "string", "confidence": "number", "supported": "boolean", "mixed_language_share": "number|null" }
     },
     {
       "name": "tool_preprocess_text",
-      "description": "Clean, tokenize, and sentence-split text",
+      "description": "Clean, tokenize, and sentence-split text; word_count counts alphabetic words only",
       "parameters": {
         "text": { "type": "string", "required": true },
         "lang": { "type": "string", "enum": ["en", "id"], "required": true }
       },
-      "returns": { "tokens": "array", "sentences": "array", "word_count": "integer", "sentence_count": "integer", "text_clean": "string" }
+      "returns": { "tokens": "array", "sentences": "array", "word_count": "integer", "token_count": "integer", "terminal_mark_count": "integer", "sentence_count": "integer", "text_clean": "string" }
+    },
+    {
+      "name": "tool_evaluate_gates",
+      "description": "Apply validity gates; the returned JSON is the gate_json required by tool_predict_iq, tool_estimate_text_complexity_band and tool_generate_report",
+      "parameters": {
+        "lang_result_json": { "type": "string", "required": true },
+        "word_count": { "type": "integer", "required": true },
+        "terminal_mark_count": { "type": "integer", "required": true },
+        "provenance": { "type": "string", "enum": ["supervised_unaided", "unsupervised", "unknown"], "default": "unknown" },
+        "text_type": { "type": "string", "enum": ["formal_prose", "informal", "unknown"], "default": "unknown" }
+      },
+      "returns": { "status": "string", "statuses": "array", "reasons": "array", "iq_allowed": "boolean", "text_ok": "boolean", "education_allowed": "boolean", "language_norm_unvalidated": "boolean", "lang": "string", "provenance": "string", "text_type": "string", "policy_version": "string" }
     },
     {
       "name": "tool_analyze_lexical",
-      "description": "Compute MATTR, VOCD-D, hapax ratio, lexical density with sentence evidence",
+      "description": "Compute MATTR, MTLD, content-word density and out-of-dictionary rate with sentence evidence",
       "parameters": {
         "tokens_json": { "type": "string", "required": true },
         "sentences_json": { "type": "string", "required": true },
         "lang": { "type": "string", "required": true }
       },
-      "returns": { "mattr": "number", "vocd_d": "number|null", "hapax_ratio": "number", "lexical_density": "number", "avg_word_length": "number", "score": "number", "evidence": "array" }
+      "returns": { "mattr": "number", "mtld": "number|null", "vocd_d": "number|null", "lexical_density": "number", "avg_word_length": "number", "token_unit": "string", "oov_rate": "number", "low_reliability": "boolean", "reliability_reasons": "array", "score_weights": "object", "score": "number|null", "evidence": "array" }
     },
     {
       "name": "tool_analyze_syntactic",
-      "description": "Compute clause density, subordination index, dependency depth",
+      "description": "Compute clause density, subordination index, dependency depth (en only); not comparable across languages",
       "parameters": {
         "sentences_json": { "type": "string", "required": true },
         "lang": { "type": "string", "required": true }
       },
-      "returns": { "mean_sentence_length": "number", "clause_density": "number", "subordination_index": "number", "dependency_depth": "number", "passive_ratio": "number", "score": "number", "evidence": "array" }
+      "returns": { "mean_sentence_length": "number", "clause_density": "number", "subordination_index": "number", "dependency_depth": "number|null", "passive_ratio": "number", "comparable_across_languages": "boolean", "score": "number", "evidence": "array", "note": "string" }
     },
     {
       "name": "tool_analyze_semantic",
-      "description": "Compute argument coherence, topic drift, lexical chain density",
+      "description": "Compute adjacent-sentence similarity, topic drift (5+ transitions) and lexical chain density; entity labels are informational",
       "parameters": {
         "text": { "type": "string", "required": true },
         "sentences_json": { "type": "string", "required": true },
-        "lang": { "type": "string", "required": true }
+        "lang": { "type": "string", "required": true },
+        "segment_boundaries_json": { "type": "string", "default": "" }
       },
-      "returns": { "argument_coherence": "number|null", "topic_drift_index": "number|null", "lexical_chain_density": "number", "entity_sophistication": "string", "score": "number", "evidence": "array" }
+      "returns": { "adjacent_sentence_similarity": "number|null", "topic_drift_index": "number|null", "lexical_chain_density": "number|null", "entity_labels": "array", "transitions": "integer", "scaling_status": "string|null", "score": "number|null", "evidence": "array" }
     },
     {
       "name": "tool_analyze_readability",
-      "description": "Compute Flesch Reading Ease, Gunning Fog, ARI, Coleman-Liau",
+      "description": "Compute Flesch, Gunning Fog, ARI, Coleman-Liau readability indices",
       "parameters": {
         "text": { "type": "string", "required": true },
         "lang": { "type": "string", "required": true }
@@ -59,7 +72,7 @@
     },
     {
       "name": "tool_compute_verbal_fluency_score",
-      "description": "Combine lexical/syntactic/semantic/readability into weighted VFS (0-100)",
+      "description": "Combine component scores into the style index (0-100); unavailable components are dropped and weights renormalised",
       "parameters": {
         "lexical_json": { "type": "string", "required": true },
         "syntactic_json": { "type": "string", "required": true },
@@ -68,40 +81,43 @@
         "word_count": { "type": "integer", "required": true },
         "lang": { "type": "string", "required": true }
       },
-      "returns": { "vfs": "number", "lexical": "number", "syntactic": "number", "semantic": "number", "readability": "number", "confidence": "number", "confidence_label": "string", "lang": "string", "text_length_words": "integer" }
+      "returns": { "vfs": "number|null", "style_index": "number|null", "style_index_label": "string", "lexical": "number|null", "syntactic": "number|null", "semantic": "number|null", "readability": "number|null", "weights_used": "object", "unavailable_components": "array", "confidence_label": "string", "lang": "string", "text_length_words": "integer" }
     },
     {
       "name": "tool_predict_iq",
-      "description": "Map VFS to IQ point estimate with 95% confidence interval",
+      "description": "Neutral style band always; experimental IQ only when gate status is OK and the language is validated, otherwise null with withheld_reason",
       "parameters": {
-        "vfs": { "type": "number", "required": true },
-        "confidence": { "type": "number", "required": true }
+        "style_index": { "type": "number", "required": true },
+        "lang": { "type": "string", "required": true },
+        "gate_json": { "type": "string", "default": "" }
       },
-      "returns": { "point_estimate": "integer", "ci_low": "integer", "ci_high": "integer", "classification": "string", "percentile": "integer" }
+      "returns": { "style_index": "number", "style_index_label": "string", "style_band": "string|null", "point_estimate": "integer|null", "range_low": "integer|null", "range_high": "integer|null", "range_label": "string", "classification": "string|null", "percentile": "integer|null", "withheld_reason": "string|null", "language_norm_unvalidated": "boolean" }
     },
     {
       "name": "tool_predict_mental_age",
-      "description": "Compute mental age from IQ. Use chronological_age=0 to use default (30).",
+      "description": "Ratio mental age only for an emitted IQ, an IQ-allowing gate and a supplied age of 16 or less; never assumes an age",
       "parameters": {
-        "iq_estimate": { "type": "number", "required": true },
-        "chronological_age": { "type": "integer", "default": 0 }
+        "iq_estimate": { "type": "number", "default": -1.0 },
+        "chronological_age": { "type": "integer", "default": 0 },
+        "gate_json": { "type": "string", "default": "" }
       },
-      "returns": { "mental_age": "number", "based_on_chronological_age": "integer", "age_assumed": "boolean", "formula": "string" }
+      "returns": { "mental_age": "number|null", "based_on_chronological_age": "integer|null", "age_assumed": "boolean", "withheld_reason": "string|null", "formula": "string" }
     },
     {
-      "name": "tool_estimate_education_level",
-      "description": "Map readability metrics to education level with EN and ID labels",
+      "name": "tool_estimate_text_complexity_band",
+      "description": "Text complexity band (median of per-metric bands); describes the text, not the writer's education; unavailable for id",
       "parameters": {
         "gunning_fog": { "type": "number", "required": true },
         "ari": { "type": "number", "required": true },
         "lexical_density": { "type": "number", "required": true },
-        "clause_density": { "type": "number", "required": true }
+        "lang": { "type": "string", "required": true },
+        "gate_json": { "type": "string", "default": "" }
       },
-      "returns": { "level_en": "string", "level_id": "string", "level_code": "string", "confidence": "number", "confidence_label": "string" }
+      "returns": { "text_complexity_band": "integer|null", "label": "string|null", "per_metric_bands": "object|null", "consistency": "string|null", "withheld_reason": "string|null", "note": "string" }
     },
     {
       "name": "tool_generate_report",
-      "description": "Generate JSON scores and/or structured report with sentence-level citation evidence",
+      "description": "Generate JSON and/or report with status, reasons, provenance caveat and sentence-level evidence",
       "parameters": {
         "lang_result_json": { "type": "string", "required": true },
         "preprocess_result_json": { "type": "string", "required": true },
@@ -112,10 +128,11 @@
         "vfs_result_json": { "type": "string", "required": true },
         "iq_result_json": { "type": "string", "required": true },
         "mental_age_result_json": { "type": "string", "required": true },
-        "edu_result_json": { "type": "string", "required": true },
-        "format_flag": { "type": "string", "enum": ["--json","--report","--both","--scores-only","--verbose-caveats"], "default": "--both" },
+        "band_result_json": { "type": "string", "required": true },
+        "format_flag": { "type": "string", "enum": ["--json", "--report", "--both", "--scores-only", "--verbose-caveats"], "default": "--both" },
         "chronological_age": { "type": "integer", "default": 0 },
-        "verbose_caveats": { "type": "boolean", "default": false }
+        "verbose_caveats": { "type": "boolean", "default": false },
+        "gate_json": { "type": "string", "default": "" }
       },
       "returns": { "json": "object|null", "report": "string|null" }
     }

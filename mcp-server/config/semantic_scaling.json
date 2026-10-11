@@ -1,0 +1,8 @@
+{
+  "status": "uncalibrated",
+  "note": "Linear 0-100 scaling of mean adjacent-sentence cosine similarity. Placeholder bounds carried over from the original code; to be replaced per language by the reference-corpus calibration in docs/validation/norming-plan.md.",
+  "languages": {
+    "en": {"similarity_min": 0.3, "similarity_max": 0.9},
+    "id": {"similarity_min": 0.3, "similarity_max": 0.9}
+  }
+}
